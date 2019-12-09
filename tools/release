@@ -6,4 +6,4 @@ ghr \
   -c "${CIRCLE_SHA1}" \
   -b="$(cat ./tools/release-note.md | envsubst)" \
   -delete -draft \
-  "test-v1.2.0" ./dist/
+  "test-v1.2.1" ./dist/
