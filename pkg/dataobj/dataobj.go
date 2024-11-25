@@ -4,9 +4,12 @@ package dataobj
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/grafana/dskit/flagext"
 	"github.com/grafana/loki/pkg/push"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/objstore"
 )
 
@@ -46,6 +49,8 @@ type BuilderConfig struct {
 type Builder struct {
 	cfg    BuilderConfig
 	bucket objstore.Bucket
+
+	tenants map[string]*tenant
 }
 
 // NewBuilder creates a new builder which stores data objects in the provided
@@ -60,7 +65,14 @@ func NewBuilder(cfg BuilderConfig, bucket objstore.Bucket) *Builder {
 // Append buffers entries to be written as a data object. If enough data has
 // been accumulated, Append will trigger a flush to object storage.
 func (b *Builder) Append(ctx context.Context, tenantID string, entries push.PushRequest) error {
-	return errors.New("not implemented")
+	tenant, ok := b.tenants[tenantID]
+	if !ok {
+		tenant = b.newTenant(tenantID)
+		b.tenants[tenantID] = tenant
+	}
+
+	// TODO(rfratto): Check if we need to flush after appending.
+	return tenant.Append(ctx, entries)
 }
 
 // Flush triggers a flush of any appended data to object storage. Calling flush
@@ -73,4 +85,83 @@ func (b *Builder) Flush(ctx context.Context) error {
 // may not be appended to a closed Builder.
 func (b *Builder) Close(ctx context.Context) error {
 	return errors.New("not implemented")
+}
+
+type tenant struct {
+	builder *Builder
+	ID      string
+	streams map[string]*stream
+}
+
+// newTenant creates a new tenant buffer with the provided ID.
+func (b *Builder) newTenant(ID string) *tenant {
+	return &tenant{
+		builder: b,
+		ID:      ID,
+	}
+}
+
+func (t *tenant) Append(ctx context.Context, entries push.PushRequest) error {
+	var errs []error
+
+	for _, pushStream := range entries.Streams {
+		dataStream, ok := t.streams[pushStream.Labels]
+		if !ok {
+			newStream, err := t.builder.newStream(pushStream.Labels)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("creating stream %q: %w", pushStream.Labels, err))
+				continue
+			}
+
+			dataStream = newStream
+			t.streams[pushStream.Labels] = dataStream
+		}
+
+		if err := dataStream.Append(ctx, pushStream.Entries); err != nil {
+			errs = append(errs, fmt.Errorf("appending to stream %q: %w", pushStream.Labels, err))
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+type stream struct {
+	builder *Builder
+	labels  labels.Labels
+
+	ts timestampColumn
+}
+
+func (b *Builder) newStream(labels string) (*stream, error) {
+	lbls, err := parser.ParseMetric(labels)
+	if err != nil {
+		return nil, err
+	}
+
+	return &stream{
+		builder: b,
+		labels:  lbls,
+		ts:      timestampColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
+	}, nil
+}
+
+func (s *stream) Append(ctx context.Context, entries []push.Entry) error {
+	var errs []error
+
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return ctx.Err()
+		}
+
+		s.ts.Append(entry.Timestamp)
+
+		for _, kvp := range entry.StructuredMetadata {
+			// TODO(rfratto): get or add structured metadata column
+			_ = kvp
+		}
+
+		// TODO(rfratto): append log line to text column
+	}
+
+	return errors.Join(errs...)
 }
