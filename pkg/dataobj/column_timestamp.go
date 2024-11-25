@@ -28,7 +28,7 @@ type timestampColumn struct {
 }
 
 // Append appends a timestamp to the column.
-func (c *timestampColumn) Append(ts time.Time) error {
+func (c *timestampColumn) Append(ts time.Time) {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
@@ -37,13 +37,12 @@ func (c *timestampColumn) Append(ts time.Time) error {
 	}
 
 	for {
-		err := c.pages[len(c.pages)-1].Append(ts)
-		if errors.Is(err, errPageFull) {
+		if !c.pages[len(c.pages)-1].Append(ts) {
 			c.pages = append(c.pages, timestampPage{maxPageSizeBytes: c.maxPageSizeBytes})
 			continue
 		}
 
-		return err
+		return
 	}
 }
 
@@ -136,9 +135,9 @@ func (p *timestampPage) Iter() iter.Seq2[time.Time, error] {
 	}
 }
 
-// Append appends a timestamp to the page. Returns errPageFull if the page is
-// full.
-func (p *timestampPage) Append(ts time.Time) error {
+// Append appends a timestamp to the page. Returns true if data was appended;
+// false if the page was full.
+func (p *timestampPage) Append(ts time.Time) bool {
 	var (
 		rawValue    = ts.UnixNano()
 		encodeValue = ts.UnixNano()
@@ -158,13 +157,13 @@ func (p *timestampPage) Append(ts time.Time) error {
 
 	buf = binary.AppendVarint(buf, encodeValue)
 	if len(p.buf) > 0 && len(buf)+len(p.buf) > p.maxPageSizeBytes {
-		return errPageFull
+		return false
 	}
 
 	p.buf = append(p.buf, buf...)
 	p.lastTS = rawValue
 	p.count++
-	return nil
+	return true
 }
 
 // UncompressedSize is the size of the page in bytes.

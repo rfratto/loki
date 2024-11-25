@@ -1,7 +1,6 @@
 package dataobj
 
 import (
-	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -18,9 +17,7 @@ func Benchmark_timestampColumn(b *testing.B) {
 	nextTS := time.Now()
 
 	for i := 0; i < b.N; i++ {
-		if err := c.Append(nextTS); err != nil {
-			require.Fail(b, "unexpected error", err)
-		}
+		c.Append(nextTS)
 
 		// Add up to 5000ms of jitter to the next timestamp.
 		nextTS = nextTS.Add(time.Duration(r.Intn(5000)) * time.Millisecond)
@@ -39,7 +36,7 @@ func Test_timestampColumn_Iter(t *testing.T) {
 	var expect []time.Time
 
 	for len(col.pages) < 3 {
-		require.NoError(t, col.Append(nextTS))
+		col.Append(nextTS)
 		expect = append(expect, nextTS)
 
 		nextTS = nextTS.Add(time.Duration(r.Intn(5000)) * time.Millisecond)
@@ -65,11 +62,8 @@ func Test_timestampPage_packing(t *testing.T) {
 	nextTS := time.Now()
 
 	for {
-		err := c.Append(nextTS)
-		if errors.Is(err, errPageFull) {
+		if !c.Append(nextTS) {
 			break
-		} else if err != nil {
-			require.Fail(t, "unexpected error", err)
 		}
 
 		// Add up to 5000ms of jitter to the next timestamp.
