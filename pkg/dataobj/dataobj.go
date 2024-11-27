@@ -129,7 +129,7 @@ type stream struct {
 	builder *Builder
 	labels  labels.Labels
 
-	ts timestampColumn
+	timestamp timeColumn
 }
 
 func (b *Builder) newStream(labels string) (*stream, error) {
@@ -139,9 +139,9 @@ func (b *Builder) newStream(labels string) (*stream, error) {
 	}
 
 	return &stream{
-		builder: b,
-		labels:  lbls,
-		ts:      timestampColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
+		builder:   b,
+		labels:    lbls,
+		timestamp: timeColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
 	}, nil
 }
 
@@ -153,10 +153,13 @@ func (s *stream) Append(ctx context.Context, entries []push.Entry) error {
 			return ctx.Err()
 		}
 
-		s.ts.Append(entry.Timestamp)
+		s.timestamp.Append(entry.Timestamp)
 
 		for _, kvp := range entry.StructuredMetadata {
 			// TODO(rfratto): get or add structured metadata column
+			//
+			// We'll want to pass row number to each of these columns (as they're
+			// dynamic) so new columns can backfill NULLs.
 			_ = kvp
 		}
 

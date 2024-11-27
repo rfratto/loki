@@ -19,26 +19,26 @@ var uvarintPool = sync.Pool{
 
 var errPageFull = errors.New("page full")
 
-// timestampColumn buffers timestamp pages in memory.
-type timestampColumn struct {
+// timeColumn buffers timestamp pages in memory.
+type timeColumn struct {
 	maxPageSizeBytes int
 
 	mut   sync.RWMutex
-	pages []timestampPage
+	pages []timePage
 }
 
 // Append appends a timestamp to the column.
-func (c *timestampColumn) Append(ts time.Time) {
+func (c *timeColumn) Append(ts time.Time) {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
 	if len(c.pages) == 0 {
-		c.pages = append(c.pages, timestampPage{maxPageSizeBytes: c.maxPageSizeBytes})
+		c.pages = append(c.pages, timePage{maxPageSizeBytes: c.maxPageSizeBytes})
 	}
 
 	for {
 		if !c.pages[len(c.pages)-1].Append(ts) {
-			c.pages = append(c.pages, timestampPage{maxPageSizeBytes: c.maxPageSizeBytes})
+			c.pages = append(c.pages, timePage{maxPageSizeBytes: c.maxPageSizeBytes})
 			continue
 		}
 
@@ -48,7 +48,7 @@ func (c *timestampColumn) Append(ts time.Time) {
 
 // Iter returns an iterator over the timestamps in the column. A read lock is
 // held during iteration.
-func (c *timestampColumn) Iter() iter.Seq2[time.Time, error] {
+func (c *timeColumn) Iter() iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		c.mut.RLock()
 		defer c.mut.RUnlock()
@@ -67,7 +67,7 @@ func (c *timestampColumn) Iter() iter.Seq2[time.Time, error] {
 }
 
 // UncompressedSize returns the uncompressed size of the column.
-func (c *timestampColumn) UncompressedSize() int {
+func (c *timeColumn) UncompressedSize() int {
 	c.mut.RLock()
 	defer c.mut.RUnlock()
 
@@ -79,7 +79,7 @@ func (c *timestampColumn) UncompressedSize() int {
 }
 
 // Count returns the number of timestamps in the column.
-func (c *timestampColumn) Count() int {
+func (c *timeColumn) Count() int {
 	c.mut.RLock()
 	defer c.mut.RUnlock()
 
@@ -90,9 +90,9 @@ func (c *timestampColumn) Count() int {
 	return total
 }
 
-// timestampPage is an individual timestamp page. Calls to timestampPage are
+// timePage is an individual timestamp page. Calls to timePage are
 // not goroutine safe; the caller must synchronize access.
-type timestampPage struct {
+type timePage struct {
 	lastTS int64
 	count  int
 	buf    []byte
@@ -102,7 +102,7 @@ type timestampPage struct {
 
 // Iter returns an iterator over the timestamps in the page. Iteration stops
 // upon encountering an error.
-func (p *timestampPage) Iter() iter.Seq2[time.Time, error] {
+func (p *timePage) Iter() iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		reader := bytes.NewReader(p.buf)
 		first, err := binary.ReadVarint(reader)
@@ -137,7 +137,7 @@ func (p *timestampPage) Iter() iter.Seq2[time.Time, error] {
 
 // Append appends a timestamp to the page. Returns true if data was appended;
 // false if the page was full.
-func (p *timestampPage) Append(ts time.Time) bool {
+func (p *timePage) Append(ts time.Time) bool {
 	var (
 		rawValue    = ts.UnixNano()
 		encodeValue = ts.UnixNano()
@@ -167,11 +167,11 @@ func (p *timestampPage) Append(ts time.Time) bool {
 }
 
 // UncompressedSize is the size of the page in bytes.
-func (p *timestampPage) UncompressedSize() int {
+func (p *timePage) UncompressedSize() int {
 	return len(p.buf)
 }
 
 // Count returns the number of timestamps in the page.
-func (p *timestampPage) Count() int {
+func (p *timePage) Count() int {
 	return p.count
 }
