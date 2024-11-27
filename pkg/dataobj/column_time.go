@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var uvarintPool = sync.Pool{
+var varintPool = sync.Pool{
 	New: func() any {
 		buf := make([]byte, binary.MaxVarintLen64)
 		return &buf
@@ -118,6 +118,8 @@ func (p *timePage) Iter() iter.Seq2[time.Time, error] {
 			return
 		}
 
+		// TODO(rfratto): change to looping over expected rows; then error if we
+		// EOF early or error if we haven't EOF'd when we should.
 		for {
 			delta, err := binary.ReadVarint(reader)
 			if errors.Is(err, io.EOF) {
@@ -147,15 +149,9 @@ func (p *timePage) Append(ts time.Time) bool {
 		encodeValue = rawValue - p.lastTS
 	}
 
-	bufPtr := uvarintPool.Get().(*[]byte)
-	buf := *bufPtr
-	buf = buf[:0]
-	defer func() {
-		// Must be done within a callback in case buf changes on the stack.
-		uvarintPool.Put(&buf)
-	}()
+	buf, bufRelease := getVarint(encodeValue)
+	defer func() { bufRelease(&buf) }()
 
-	buf = binary.AppendVarint(buf, encodeValue)
 	if len(p.buf) > 0 && len(buf)+len(p.buf) > p.maxPageSizeBytes {
 		return false
 	}
@@ -174,4 +170,30 @@ func (p *timePage) UncompressedSize() int {
 // Count returns the number of timestamps in the page.
 func (p *timePage) Count() int {
 	return p.count
+}
+
+// getUvarint returns a buffer containing the uvarint encoding of val. Call
+// release after using buf to return it to the pool.
+func getUvarint(val uint64) (buf []byte, release func(*[]byte)) {
+	bufPtr := varintPool.Get().(*[]byte)
+	buf = (*bufPtr)[:0]
+	buf = binary.AppendUvarint(buf, val)
+
+	// Our release function accepts a pointer to the buf to return to the pool to
+	// avoid having &buf escape to the heap; this reduces allocations by 1 per
+	// op.
+	return buf, func(b *[]byte) { varintPool.Put(b) }
+}
+
+// getVarint returns a buffer containing the varint encoding of val. Call
+// release after using buf to return it to the pool.
+func getVarint(val int64) (buf []byte, release func(*[]byte)) {
+	bufPtr := varintPool.Get().(*[]byte)
+	buf = (*bufPtr)[:0]
+	buf = binary.AppendVarint(buf, val)
+
+	// Our release function accepts a pointer to the buf to return to the pool to
+	// avoid having &buf escape to the heap; this reduces allocations by 1 per
+	// op.
+	return buf, func(b *[]byte) { varintPool.Put(b) }
 }
