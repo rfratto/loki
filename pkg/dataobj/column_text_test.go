@@ -38,7 +38,7 @@ func Test_zero_uvarint(t *testing.T) {
 }
 
 func Test_textPage_Iter(t *testing.T) {
-	p := textPage{maxPageSizeBytes: 1_500_000}
+	p := memTextPage{maxPageSizeBytes: 1_500_000}
 
 	input := []struct {
 		row  int
@@ -46,13 +46,15 @@ func Test_textPage_Iter(t *testing.T) {
 	}{
 		{0, "hello"},
 		{2, "world"},
-		{3, "!"},
+		{5, "!"},
 	}
 	for _, in := range input {
 		require.True(t, p.Append(in.row, in.text))
 	}
 
-	expect := []string{"hello", "", "world", "!"}
+	require.Equal(t, 6, p.count)
+
+	expect := []string{"hello", "", "world", "", "", "!"}
 
 	var actual []string
 	for text, err := range p.Iter() {
@@ -61,4 +63,17 @@ func Test_textPage_Iter(t *testing.T) {
 	}
 
 	require.Equal(t, expect, actual)
+}
+
+func Test_textPage_Backfill(t *testing.T) {
+	p := memTextPage{maxPageSizeBytes: 1_500_000}
+
+	require.True(t, p.Append(0, "Hello"))
+	require.True(t, p.Backfill(5))
+
+	require.Equal(t, 6, p.count)
+
+	require.True(t, p.Append(6, "Goodbyte"))
+
+	require.Equal(t, 7, p.count)
 }

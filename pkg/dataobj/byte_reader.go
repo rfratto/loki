@@ -2,6 +2,22 @@ package dataobj
 
 import "io"
 
+type scanner interface {
+	io.Reader
+	io.ByteReader
+
+	// Discard skips the next n bytes, returning the number of bytes discarded.
+	// If Discard skips fewer than n bytes, it also returns an error.
+	Discard(n int) (discarded int, err error)
+
+	// Peek returns the next n bytes without advancing the scanner. The bytes
+	// stop being valid at the next read or discard call. If Peek returns fewer
+	// than n bytes, it also returns an error explaining why the read is short.
+	// The error is [bufio.ErrBufferFull] if scanner is buffered and n is larger
+	// than the scanner's buffer size.
+	Peek(n int) ([]byte, error)
+}
+
 // byteReader allows for reading bytes from a slice. Unlike [bytes.NewBuffer],
 // it does not take ownership over the byte slice.
 type byteReader struct {
@@ -10,8 +26,7 @@ type byteReader struct {
 }
 
 var (
-	_ io.Reader     = (*byteReader)(nil)
-	_ io.ByteReader = (*byteReader)(nil)
+	_ scanner = (*byteReader)(nil)
 )
 
 func (br *byteReader) ReadByte() (byte, error) {
@@ -37,19 +52,20 @@ func (br *byteReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// Next retrieves up to the next n bytes from the buffer, returning the slice
-// and the number of bytes read.
-func (br *byteReader) Next(n int) ([]byte, int) {
-	if br.off >= len(br.buf) {
-		return nil, 0
+// Discard skips the next n bytes, returning the number of bytes discarded.
+func (br *byteReader) Discard(n int) (int, error) {
+	if br.off+n > len(br.buf) {
+		n = len(br.buf) - br.off
 	}
+	br.off += n
+	return n, nil
+}
 
-	end := br.off + n
-	if end > len(br.buf) {
-		end = len(br.buf)
+// Peek returns the next n bytes without advancing the scanner. The bytes stop
+// being valid at the next read or discard call.
+func (br *byteReader) Peek(n int) ([]byte, error) {
+	if br.off+n > len(br.buf) {
+		return nil, io.EOF
 	}
-
-	b := br.buf[br.off:end]
-	br.off = end
-	return b, len(b)
+	return br.buf[br.off : br.off+n], nil
 }

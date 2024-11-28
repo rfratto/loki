@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
+	"maps"
+	"slices"
 
 	"github.com/grafana/dskit/flagext"
 	"github.com/grafana/loki/pkg/push"
@@ -129,7 +132,10 @@ type stream struct {
 	builder *Builder
 	labels  labels.Labels
 
-	timestamp timeColumn
+	timestamp *timeColumn
+	metadata  map[string]*textColumn
+	logColumn *textColumn
+	rows      int
 }
 
 func (b *Builder) newStream(labels string) (*stream, error) {
@@ -141,30 +147,137 @@ func (b *Builder) newStream(labels string) (*stream, error) {
 	return &stream{
 		builder:   b,
 		labels:    lbls,
-		timestamp: timeColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
+		timestamp: &timeColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
+		metadata:  make(map[string]*textColumn),
+		logColumn: &textColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
 	}, nil
 }
 
-func (s *stream) Append(ctx context.Context, entries []push.Entry) error {
-	var errs []error
+func (s *stream) Iter() iter.Seq2[push.Entry, error] {
+	// Before we iterate, we must backfill all columns to guarantee all columns
+	// have the same number of rows.
+	s.Backfill()
 
+	return func(yield func(push.Entry, error) bool) {
+		pullTs, stopTs := iter.Pull2(s.timestamp.Iter())
+		defer stopTs()
+
+		pullColumns := s.metadataPullers()
+		defer func() {
+			for _, col := range pullColumns {
+				col.Stop()
+			}
+		}()
+
+		pullLog, stopLog := iter.Pull2(s.logColumn.Iter())
+		defer stopLog()
+
+		for {
+			var ent push.Entry
+
+			ts, err, ok := pullTs()
+			if err != nil {
+				yield(push.Entry{}, err)
+				return
+			} else if !ok {
+				return
+			}
+			ent.Timestamp = ts
+
+			for _, pullMetadata := range pullColumns {
+				val, err, ok := pullMetadata.NextValue()
+				if err != nil {
+					yield(push.Entry{}, err)
+					return
+				} else if !ok {
+					return
+				} else if val == "" {
+					continue
+				}
+
+				ent.StructuredMetadata = append(ent.StructuredMetadata, push.LabelAdapter{
+					Name:  pullMetadata.Key,
+					Value: val,
+				})
+			}
+
+			log, err, ok := pullLog()
+			if err != nil {
+				yield(push.Entry{}, err)
+				return
+			} else if !ok {
+				return
+			}
+
+			ent.Line = log
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+type metadataPuller struct {
+	Key       string
+	NextValue func() (string, error, bool)
+	Stop      func()
+}
+
+// metadataPullers returns a sequence of metadataPuller instances for each
+// column.
+func (s *stream) metadataPullers() []metadataPuller {
+	columnNames := slices.Collect(maps.Keys(s.metadata))
+
+	pullers := make([]metadataPuller, 0, len(columnNames))
+	for _, name := range columnNames {
+		next, stop := iter.Pull2(s.metadata[name].Iter())
+
+		puller := metadataPuller{
+			Key:       name,
+			NextValue: next,
+			Stop:      stop,
+		}
+		pullers = append(pullers, puller)
+	}
+	return pullers
+}
+
+// TODO(rfratto): before flushing, we want to make sure all columns have the same number of rows.
+
+func (s *stream) Append(ctx context.Context, entries []push.Entry) error {
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return ctx.Err()
 		}
 
 		s.timestamp.Append(entry.Timestamp)
-
 		for _, kvp := range entry.StructuredMetadata {
-			// TODO(rfratto): get or add structured metadata column
-			//
-			// We'll want to pass row number to each of these columns (as they're
-			// dynamic) so new columns can backfill NULLs.
-			_ = kvp
+			// Providing the row count here allows backfilling columns with NULLs.
+			s.getOrAddTextColumn(kvp.Name).Append(s.rows, kvp.Value)
 		}
+		s.logColumn.Append(s.rows, entry.Line)
 
-		// TODO(rfratto): append log line to text column
+		s.rows++
 	}
 
-	return errors.Join(errs...)
+	return nil
+}
+
+func (s *stream) getOrAddTextColumn(key string) *textColumn {
+	col, ok := s.metadata[key]
+	if !ok {
+		col = &textColumn{maxPageSizeBytes: int(s.builder.cfg.MaxPageSize)}
+		s.metadata[key] = col
+	}
+	return col
+}
+
+// Backfill ensures all optional columns have the same number of rows as other columns.
+func (s *stream) Backfill() {
+	for _, col := range s.metadata {
+		for col.Count() < s.rows {
+			// s.rows is a count, so we need to subtract 1 to get the last row index.
+			col.Backfill(s.rows - 1)
+		}
+	}
 }

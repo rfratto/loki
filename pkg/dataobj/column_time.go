@@ -1,13 +1,16 @@
 package dataobj
 
 import (
-	"bytes"
+	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"iter"
 	"sync"
 	"time"
+
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 var varintPool = sync.Pool{
@@ -24,7 +27,9 @@ type timeColumn struct {
 	maxPageSizeBytes int
 
 	mut   sync.RWMutex
-	pages []timePage
+	pages []page
+
+	curPage *memTimePage
 }
 
 // Append appends a timestamp to the column.
@@ -32,38 +37,88 @@ func (c *timeColumn) Append(ts time.Time) {
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
-	if len(c.pages) == 0 {
-		c.pages = append(c.pages, timePage{maxPageSizeBytes: c.maxPageSizeBytes})
+	if c.curPage == nil {
+		c.curPage = &memTimePage{maxPageSizeBytes: c.maxPageSizeBytes}
 	}
 
-	for {
-		if !c.pages[len(c.pages)-1].Append(ts) {
-			c.pages = append(c.pages, timePage{maxPageSizeBytes: c.maxPageSizeBytes})
-			continue
+	// We give two attempts to append the data to the page; if the current page
+	// is full, we cut it and append to the reset page.
+	//
+	// Appending to the reset page should never fail, as it'll allow its first
+	// record to be oversized. If it fails, there's a bug.
+	for range 2 {
+		if c.curPage.Append(ts) {
+			return
 		}
 
+		c.cutPage()
+	}
+
+	panic("textColumn.Append: failed to append text to fresh page")
+}
+
+func (c *timeColumn) cutPage() {
+	if c.curPage == nil {
 		return
 	}
+
+	buf, crc32, err := compressData(c.curPage.buf, streamsmd.COMPRESSION_NONE)
+	if err != nil {
+		panic(fmt.Sprintf("failed to compress text page: %v", err))
+	}
+
+	c.pages = append(c.pages, page{
+		UncompressedSize: len(c.curPage.buf),
+		CompressedSize:   len(buf),
+		CRC32:            crc32,
+		RowCount:         c.curPage.count,
+		Compression:      streamsmd.COMPRESSION_NONE,
+		Encoding:         streamsmd.ENCODING_PLAIN,
+		Data:             buf,
+	})
+
+	// Reset the current page for new data.
+	c.curPage.count = 0
+	c.curPage.buf = c.curPage.buf[:0]
 }
 
 // Iter returns an iterator over the timestamps in the column. A read lock is
 // held during iteration.
 func (c *timeColumn) Iter() iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
-		c.mut.RLock()
-		defer c.mut.RUnlock()
-
-		for _, p := range c.pages {
-			for ts, err := range p.Iter() {
-				if err != nil {
-					yield(ts, err)
-					return
-				} else if !yield(ts, nil) {
-					return
-				}
+		// Iterate over cut pages.
+		for _, page := range c.pages {
+			if !c.iterPage(page, yield) {
+				return
 			}
 		}
+
+		// Iterate over the in-memory page.
+		c.curPage.Iter()(yield)
 	}
+}
+
+func (c *timeColumn) iterPage(p page, yield func(time.Time, error) bool) bool {
+	r, err := p.Reader()
+	if err != nil {
+		yield(time.Time{}, err)
+		return false
+	}
+	defer r.Close()
+
+	// TODO(rfratto): pool?
+	br := bufio.NewReaderSize(r, 4096)
+
+	for s, err := range timePageIter(br, int(p.RowCount)) {
+		if err != nil {
+			yield(s, err)
+			return false
+		} else if !yield(s, nil) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // UncompressedSize returns the uncompressed size of the column.
@@ -73,7 +128,10 @@ func (c *timeColumn) UncompressedSize() int {
 
 	var totalSz int
 	for _, p := range c.pages {
-		totalSz += p.UncompressedSize()
+		totalSz += p.UncompressedSize
+	}
+	if c.curPage != nil {
+		totalSz += c.curPage.UncompressedSize()
 	}
 	return totalSz
 }
@@ -85,14 +143,17 @@ func (c *timeColumn) Count() int {
 
 	var total int
 	for _, p := range c.pages {
-		total += p.Count()
+		total += p.RowCount
+	}
+	if c.curPage != nil {
+		total += c.curPage.Count()
 	}
 	return total
 }
 
-// timePage is an individual timestamp page. Calls to timePage are
+// memTimePage is an individual timestamp page. Calls to memTimePage are
 // not goroutine safe; the caller must synchronize access.
-type timePage struct {
+type memTimePage struct {
 	lastTS int64
 	count  int
 	buf    []byte
@@ -102,10 +163,18 @@ type timePage struct {
 
 // Iter returns an iterator over the timestamps in the page. Iteration stops
 // upon encountering an error.
-func (p *timePage) Iter() iter.Seq2[time.Time, error] {
+func (p *memTimePage) Iter() iter.Seq2[time.Time, error] {
+	br := byteReader{buf: p.buf}
+	return timePageIter(&br, p.count)
+}
+
+func timePageIter(s scanner, rows int) iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
-		reader := bytes.NewReader(p.buf)
-		first, err := binary.ReadVarint(reader)
+		if rows == 0 {
+			return
+		}
+
+		first, err := binary.ReadVarint(s)
 		if errors.Is(err, io.EOF) {
 			return
 		} else if err != nil {
@@ -118,10 +187,8 @@ func (p *timePage) Iter() iter.Seq2[time.Time, error] {
 			return
 		}
 
-		// TODO(rfratto): change to looping over expected rows; then error if we
-		// EOF early or error if we haven't EOF'd when we should.
-		for {
-			delta, err := binary.ReadVarint(reader)
+		for range rows - 1 {
+			delta, err := binary.ReadVarint(s)
 			if errors.Is(err, io.EOF) {
 				return
 			} else if err != nil {
@@ -135,11 +202,12 @@ func (p *timePage) Iter() iter.Seq2[time.Time, error] {
 			}
 		}
 	}
+
 }
 
 // Append appends a timestamp to the page. Returns true if data was appended;
 // false if the page was full.
-func (p *timePage) Append(ts time.Time) bool {
+func (p *memTimePage) Append(ts time.Time) bool {
 	var (
 		rawValue    = ts.UnixNano()
 		encodeValue = ts.UnixNano()
@@ -163,12 +231,12 @@ func (p *timePage) Append(ts time.Time) bool {
 }
 
 // UncompressedSize is the size of the page in bytes.
-func (p *timePage) UncompressedSize() int {
+func (p *memTimePage) UncompressedSize() int {
 	return len(p.buf)
 }
 
 // Count returns the number of timestamps in the page.
-func (p *timePage) Count() int {
+func (p *memTimePage) Count() int {
 	return p.count
 }
 

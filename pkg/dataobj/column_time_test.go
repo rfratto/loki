@@ -55,7 +55,7 @@ func Test_timeColumn_Iter(t *testing.T) {
 // in 1.5MB pages.
 func Test_timePage_packing(t *testing.T) {
 	r := rand.New(rand.NewSource(0))
-	c := &timePage{
+	c := &memTimePage{
 		maxPageSizeBytes: 1_500_000, // 1.5MB
 	}
 
