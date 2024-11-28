@@ -1,18 +1,140 @@
 package dataobj
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"iter"
 	"unsafe"
+
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
-var textColumn struct {
+type cutTextPage struct {
+	uncompressedSize uint32
+	compressedSize   uint32
+	crc32            uint32
+	rowCount         uint32
+
+	data []byte
+}
+
+func newCutTextPage(memPage *textPage) cutTextPage {
+	buf := bytes.NewBuffer(nil)
+	gw := gzip.NewWriter(buf)
+
+	_, err := io.Copy(gw, bytes.NewReader(memPage.buf))
+	if err != nil {
+		panic(fmt.Sprintf("failed to compress text page: %v", err))
+	} else if err := gw.Close(); err != nil {
+		panic(fmt.Sprintf("failed to close gzip writer: %v", err))
+	}
+
+	hash := crc32.New(crc32.MakeTable(crc32.Castagnoli))
+	_, err = io.Copy(hash, bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		panic(fmt.Sprintf("failed to hash compressed text page: %v", err))
+	}
+
+	return cutTextPage{
+		uncompressedSize: uint32(len(memPage.buf)),
+		compressedSize:   uint32(len(buf.Bytes())),
+		crc32:            hash.Sum32(),
+		rowCount:         uint32(memPage.rows),
+
+		data: buf.Bytes(),
+	}
+}
+
+type textColumn struct {
 	maxPageSizeBytes int
 
-	pages []textPage
+	pages []cutTextPage
+
+	curPage *textPage
+}
+
+func (c *textColumn) Iter() iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		// Iterate over cut pages.
+		for _, page := range c.pages {
+			// Decompress the page.
+			//
+			// TODO(rfratto): validate crc32?
+			gr, err := gzip.NewReader(bytes.NewReader(page.data))
+			if err != nil {
+				yield("", err)
+				return
+			} else if err := gr.Close(); err != nil {
+				yield("", err)
+				return
+			}
+
+			// TODO(rfratto): pool?
+			buf, err := io.ReadAll(gr)
+			if err != nil {
+				yield("", err)
+				return
+			}
+
+			// TODO(rfratto): this is weird; maybe a textPageReader would be better
+			// so we don't have to mock out a fake textPage.
+			memPage := &textPage{
+				rows: int(page.rowCount),
+				buf:  buf,
+			}
+
+			for s, err := range memPage.Iter() {
+				if err != nil {
+					yield("", err)
+					return
+				} else if !yield(s, nil) {
+					return
+				}
+			}
+		}
+
+		// Iterate over the in-memory page.
+		c.curPage.Iter()(yield)
+	}
+}
+
+func (c *textColumn) Append(row int, text string) {
+	if c.curPage == nil {
+		// We use compression on the individual pages, so we'll want to increase
+		// their size to account for expected compression ratio.
+		targetSize := targetCompressedPageSize(c.maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
+		c.curPage = &textPage{
+			maxPageSizeBytes: targetSize,
+			firstRow:         0,
+			rows:             0,
+			buf:              make([]byte, 0, targetSize),
+		}
+	}
+
+	// We give two attempts to append the data to the page; if the current page
+	// is full, we cut it and append to the reset page.
+	//
+	// Appending to the reset page should never fail, as it'll allow its first
+	// record to be oversized. If it fails, there's a bug.
+	for range 2 {
+		if c.curPage.Append(row, text) {
+			return
+		}
+
+		c.pages = append(c.pages, newCutTextPage(c.curPage))
+
+		// Reset the current page for new data.
+		c.curPage.firstRow += c.curPage.rows
+		c.curPage.rows = 0
+		c.curPage.buf = c.curPage.buf[:0]
+	}
+
+	panic("textColumn.Append: failed to append text to fresh page")
 }
 
 // textPage is an individual page containing text data. Calls to textPage are
