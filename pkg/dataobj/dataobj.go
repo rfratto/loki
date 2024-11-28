@@ -68,6 +68,9 @@ func NewBuilder(cfg BuilderConfig, bucket objstore.Bucket) *Builder {
 // Append buffers entries to be written as a data object. If enough data has
 // been accumulated, Append will trigger a flush to object storage.
 func (b *Builder) Append(ctx context.Context, tenantID string, entries push.PushRequest) error {
+	if b.tenants == nil {
+		b.tenants = make(map[string]*tenant)
+	}
 	tenant, ok := b.tenants[tenantID]
 	if !ok {
 		tenant = b.newTenant(tenantID)
@@ -105,6 +108,10 @@ func (b *Builder) newTenant(ID string) *tenant {
 }
 
 func (t *tenant) Append(ctx context.Context, entries push.PushRequest) error {
+	if t.streams == nil {
+		t.streams = make(map[string]*stream)
+	}
+
 	var errs []error
 
 	for _, pushStream := range entries.Streams {
