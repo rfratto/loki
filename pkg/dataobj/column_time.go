@@ -20,25 +20,21 @@ var varintPool = sync.Pool{
 	},
 }
 
-var errPageFull = errors.New("page full")
-
 // timeColumn buffers timestamp pages in memory.
 type timeColumn struct {
 	maxPageSizeBytes int
 
-	mut   sync.RWMutex
-	pages []page
-
+	pages   []page
 	curPage *memTimePage
 }
 
 // Append appends a timestamp to the column.
 func (c *timeColumn) Append(ts time.Time) {
-	c.mut.Lock()
-	defer c.mut.Unlock()
-
 	if c.curPage == nil {
-		c.curPage = &memTimePage{maxPageSizeBytes: c.maxPageSizeBytes}
+		c.curPage = &memTimePage{
+			maxPageSizeBytes: c.maxPageSizeBytes,
+			buf:              make([]byte, 0, c.maxPageSizeBytes),
+		}
 	}
 
 	// We give two attempts to append the data to the page; if the current page
@@ -54,7 +50,7 @@ func (c *timeColumn) Append(ts time.Time) {
 		c.cutPage()
 	}
 
-	panic("textColumn.Append: failed to append text to fresh page")
+	panic("timeColumn.Append: failed to append text to fresh page")
 }
 
 func (c *timeColumn) cutPage() {
@@ -121,26 +117,8 @@ func (c *timeColumn) iterPage(p page, yield func(time.Time, error) bool) bool {
 	return true
 }
 
-// UncompressedSize returns the uncompressed size of the column.
-func (c *timeColumn) UncompressedSize() int {
-	c.mut.RLock()
-	defer c.mut.RUnlock()
-
-	var totalSz int
-	for _, p := range c.pages {
-		totalSz += p.UncompressedSize
-	}
-	if c.curPage != nil {
-		totalSz += c.curPage.UncompressedSize()
-	}
-	return totalSz
-}
-
 // Count returns the number of timestamps in the column.
 func (c *timeColumn) Count() int {
-	c.mut.RLock()
-	defer c.mut.RUnlock()
-
 	var total int
 	for _, p := range c.pages {
 		total += p.RowCount

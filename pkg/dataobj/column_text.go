@@ -19,6 +19,58 @@ type textColumn struct {
 	curPage *memTextPage
 }
 
+func (c *textColumn) Append(row int, text string) {
+	if c.curPage == nil {
+		// We use compression on the individual pages, so we'll want to increase
+		// their size to account for expected compression ratio.
+		targetSize := targetCompressedPageSize(c.maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
+		c.curPage = &memTextPage{
+			maxPageSizeBytes: targetSize,
+			buf:              make([]byte, 0, targetSize),
+		}
+	}
+
+	// We give two attempts to append the data to the page; if the current page
+	// is full, we cut it and append to the reset page.
+	//
+	// Appending to the reset page should never fail, as it'll allow its first
+	// record to be oversized. If it fails, there's a bug.
+	for range 2 {
+		if c.curPage.Append(row, text) {
+			return
+		}
+		c.cutPage()
+	}
+
+	panic("textColumn.Append: failed to append text to fresh page")
+}
+
+func (c *textColumn) cutPage() {
+	if c.curPage == nil {
+		return
+	}
+
+	buf, crc32, err := compressData(c.curPage.buf, streamsmd.COMPRESSION_GZIP)
+	if err != nil {
+		panic(fmt.Sprintf("failed to compress text page: %v", err))
+	}
+
+	c.pages = append(c.pages, page{
+		UncompressedSize: len(c.curPage.buf),
+		CompressedSize:   len(buf),
+		CRC32:            crc32,
+		RowCount:         c.curPage.count,
+		Compression:      streamsmd.COMPRESSION_GZIP,
+		Encoding:         streamsmd.ENCODING_PLAIN,
+		Data:             buf,
+	})
+
+	// Reset the current page for new data.
+	c.curPage.firstRow += c.curPage.count
+	c.curPage.count = 0
+	c.curPage.buf = c.curPage.buf[:0]
+}
+
 func (c *textColumn) Iter() iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		// Iterate over cut pages.
@@ -88,67 +140,6 @@ func (c *textColumn) Backfill(row int) {
 	}
 
 	panic("textColumn.Backfill: failed to backfill to fresh page")
-}
-
-func (c *textColumn) Append(row int, text string) {
-	if c.curPage == nil {
-		// We use compression on the individual pages, so we'll want to increase
-		// their size to account for expected compression ratio.
-		targetSize := targetCompressedPageSize(c.maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
-		c.curPage = &memTextPage{
-			maxPageSizeBytes: targetSize,
-			firstRow:         0,
-			count:            0,
-			buf:              make([]byte, 0, targetSize),
-		}
-	}
-
-	// We give two attempts to append the data to the page; if the current page
-	// is full, we cut it and append to the reset page.
-	//
-	// Appending to the reset page should never fail, as it'll allow its first
-	// record to be oversized. If it fails, there's a bug.
-	for range 2 {
-		if c.curPage.Append(row, text) {
-			return
-		}
-		c.cutPage()
-	}
-
-	panic("textColumn.Append: failed to append text to fresh page")
-}
-
-// Flush flushes data in the current page to the column.
-func (c *textColumn) Flush() {
-	if c.curPage != nil && c.curPage.count > 0 {
-		c.cutPage()
-	}
-}
-
-func (c *textColumn) cutPage() {
-	if c.curPage == nil {
-		return
-	}
-
-	buf, crc32, err := compressData(c.curPage.buf, streamsmd.COMPRESSION_GZIP)
-	if err != nil {
-		panic(fmt.Sprintf("failed to compress text page: %v", err))
-	}
-
-	c.pages = append(c.pages, page{
-		UncompressedSize: len(c.curPage.buf),
-		CompressedSize:   len(buf),
-		CRC32:            crc32,
-		RowCount:         c.curPage.count,
-		Compression:      streamsmd.COMPRESSION_GZIP,
-		Encoding:         streamsmd.ENCODING_PLAIN,
-		Data:             buf,
-	})
-
-	// Reset the current page for new data.
-	c.curPage.firstRow += c.curPage.count
-	c.curPage.count = 0
-	c.curPage.buf = c.curPage.buf[:0]
 }
 
 func (c *textColumn) Count() int {
