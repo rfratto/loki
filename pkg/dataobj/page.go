@@ -82,7 +82,7 @@ func compressData(buf []byte, compression streamsmd.CompressionType) ([]byte, ui
 //
 // If compression is streamsmd.COMPRESSION_NONE, uncompressedSize is returned
 // unmodified.
-func targetCompressedPageSize(uncompressedSize int, compression streamsmd.CompressionType) int {
+func targetCompressedPageSize(uncompressedSize uint64, compression streamsmd.CompressionType) uint64 {
 	const (
 		// averageCompressionRatioGzip is the average compression ratio of Gzip.
 		//
@@ -95,7 +95,7 @@ func targetCompressedPageSize(uncompressedSize int, compression streamsmd.Compre
 	case streamsmd.COMPRESSION_UNSPECIFIED, streamsmd.COMPRESSION_NONE:
 		return uncompressedSize
 	case streamsmd.COMPRESSION_GZIP:
-		return int(float64(uncompressedSize) / averageCompressionRatioGzip)
+		return uint64(float64(uncompressedSize) / averageCompressionRatioGzip)
 	}
 
 	panic(fmt.Sprintf("Unexpected compression type %s", compression.String()))

@@ -1,115 +1,101 @@
 package dataobj
 
 import (
-	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"iter"
-	"sync"
 	"time"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
-var varintPool = sync.Pool{
-	New: func() any {
-		buf := make([]byte, binary.MaxVarintLen64)
-		return &buf
-	},
+// newTimeColumn creates a new column for storing timestamps.
+func newTimeColumn(maxPageSizeBytes uint64) *column[time.Time] {
+	return &column[time.Time]{
+		pageIter: timePageIter,
+		curPage: &headTimePage{
+			maxPageSizeBytes: maxPageSizeBytes,
+
+			buf: make([]byte, 0, maxPageSizeBytes),
+		},
+	}
 }
 
-// timeColumn buffers timestamp pages in memory.
-type timeColumn struct {
-	maxPageSizeBytes int
+// headTimePage is a head page containing time data.
+//
+// Timestamps are encoded using nanosecond-precision delta encoding. The first
+// timestamp is encoded as the full UnixNano value; subsequent timestamps are
+// encoded as the delta between the previous timestamp and the current
+// timestamp.
+//
+// Empty rows are encoded as a zero delta.
+type headTimePage struct {
+	// maxPageSizeBytes is the maximum size of encoded data this page may
+	// contain.
+	maxPageSizeBytes uint64
 
-	pages   []page
-	curPage *memTimePage
+	rows int // Number of rows currently in the page.
+	buf  []byte
+
+	lastTS int64
 }
 
-// Append appends a timestamp to the column.
-func (c *timeColumn) Append(ts time.Time) {
-	if c.curPage == nil {
-		c.curPage = &memTimePage{
-			maxPageSizeBytes: c.maxPageSizeBytes,
-			buf:              make([]byte, 0, c.maxPageSizeBytes),
+var _ headPage[time.Time] = (*headTimePage)(nil)
+
+// Append appends a timestamp to the page. Thw row argument specifies the
+// page-scoped row number (zero-indexed) of the timestamp being appended.
+// Missing rows will be backfilled with a delta of zero.
+//
+// Append returns true if data was appended; false if the page was full.
+//
+// Append panics if called with an out-of-order row number.
+func (p *headTimePage) Append(row int, ts time.Time) bool {
+	if row < p.rows {
+		panic(fmt.Sprintf("headTimePage.Append: out-of-order row %d (expected >= %d)", row, p.rows))
+	} else if row > p.rows {
+		// Backfill rows up to row. Backfill is inclusive so we subtract 1 to allow
+		// us to write a new entry for row.
+		if !p.Backfill(row - 1) {
+			return false
 		}
 	}
 
-	// We give two attempts to append the data to the page; if the current page
-	// is full, we cut it and append to the reset page.
-	//
-	// Appending to the reset page should never fail, as it'll allow its first
-	// record to be oversized. If it fails, there's a bug.
-	for range 2 {
-		if c.curPage.Append(ts) {
-			return
-		}
-
-		c.cutPage()
+	var (
+		rawValue    = ts.UnixNano()
+		encodeValue = ts.UnixNano()
+	)
+	if p.rows > 0 {
+		// Delta-encode subsequent timestamps after the first entry.
+		encodeValue = rawValue - p.lastTS
 	}
 
-	panic("timeColumn.Append: failed to append text to fresh page")
-}
+	buf, bufRelease := getVarint(encodeValue)
+	defer func() { bufRelease(&buf) }()
 
-func (c *timeColumn) cutPage() {
-	if c.curPage == nil {
-		return
-	}
-
-	buf, crc32, err := compressData(c.curPage.buf, streamsmd.COMPRESSION_NONE)
-	if err != nil {
-		panic(fmt.Sprintf("failed to compress text page: %v", err))
-	}
-
-	c.pages = append(c.pages, page{
-		UncompressedSize: len(c.curPage.buf),
-		CompressedSize:   len(buf),
-		CRC32:            crc32,
-		RowCount:         c.curPage.count,
-		Compression:      streamsmd.COMPRESSION_NONE,
-		Encoding:         streamsmd.ENCODING_PLAIN,
-		Data:             buf,
-	})
-
-	// Reset the current page for new data.
-	c.curPage.count = 0
-	c.curPage.buf = c.curPage.buf[:0]
-}
-
-// Iter returns an iterator over the timestamps in the column. A read lock is
-// held during iteration.
-func (c *timeColumn) Iter() iter.Seq2[time.Time, error] {
-	return func(yield func(time.Time, error) bool) {
-		// Iterate over cut pages.
-		for _, page := range c.pages {
-			if !c.iterPage(page, yield) {
-				return
-			}
-		}
-
-		// Iterate over the in-memory page.
-		c.curPage.Iter()(yield)
-	}
-}
-
-func (c *timeColumn) iterPage(p page, yield func(time.Time, error) bool) bool {
-	r, err := p.Reader()
-	if err != nil {
-		yield(time.Time{}, err)
+	if len(p.buf) > 0 && uint64(len(buf)+len(p.buf)) > p.maxPageSizeBytes {
 		return false
 	}
-	defer r.Close()
 
-	// TODO(rfratto): pool?
-	br := bufio.NewReaderSize(r, 4096)
+	p.buf = append(p.buf, buf...)
+	p.lastTS = rawValue
+	p.rows = row + 1
+	return true
+}
 
-	for s, err := range timePageIter(br, int(p.RowCount)) {
-		if err != nil {
-			yield(s, err)
-			return false
-		} else if !yield(s, nil) {
+// Backfill appends zero deltas to the page up to and including the provided
+// row number.
+func (p *headTimePage) Backfill(row int) bool {
+	if row < p.rows {
+		return true
+	}
+
+	lastTS := time.Unix(0, p.lastTS).UTC()
+
+	for backfillRow := p.rows; backfillRow <= row; backfillRow++ {
+		// Re-append the last TS to the page; the delta will be zero.
+		if !p.Append(backfillRow, lastTS) {
 			return false
 		}
 	}
@@ -117,35 +103,40 @@ func (c *timeColumn) iterPage(p page, yield func(time.Time, error) bool) bool {
 	return true
 }
 
-// Count returns the number of timestamps in the column.
-func (c *timeColumn) Count() int {
-	var total int
-	for _, p := range c.pages {
-		total += p.RowCount
+// Data returns the current data in the page along with the number of rows. The
+// returned buf must not be modified.
+func (p *headTimePage) Data() ([]byte, int) {
+	return p.buf, p.rows
+}
+
+// Flush returns a page from p, then resets p for new data.
+func (p *headTimePage) Flush() (page, error) {
+	// No compression is used for timestamps; it's unlikely that compression can
+	// make delta encoding more efficient.
+	buf, crc32, err := compressData(p.buf, streamsmd.COMPRESSION_NONE)
+	if err != nil {
+		return page{}, fmt.Errorf("compressing text page: %w", err)
 	}
-	if c.curPage != nil {
-		total += c.curPage.Count()
+
+	newPage := page{
+		UncompressedSize: len(p.buf),
+		CompressedSize:   len(buf),
+		CRC32:            crc32,
+		RowCount:         p.rows,
+		Compression:      streamsmd.COMPRESSION_NONE,
+		Encoding:         streamsmd.ENCODING_DELTA,
+		Data:             buf,
 	}
-	return total
+
+	// Reset the current page for new data.
+	p.rows = 0
+	p.buf = p.buf[:0]
+	p.lastTS = 0
+	return newPage, nil
 }
 
-// memTimePage is an individual timestamp page. Calls to memTimePage are
-// not goroutine safe; the caller must synchronize access.
-type memTimePage struct {
-	lastTS int64
-	count  int
-	buf    []byte
-
-	maxPageSizeBytes int
-}
-
-// Iter returns an iterator over the timestamps in the page. Iteration stops
-// upon encountering an error.
-func (p *memTimePage) Iter() iter.Seq2[time.Time, error] {
-	br := byteReader{buf: p.buf}
-	return timePageIter(&br, p.count)
-}
-
+// timePageIter returns an iterator that reads delta-encoded timestamps from a
+// scanner.
 func timePageIter(s scanner, rows int) iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		if rows == 0 {
@@ -180,66 +171,4 @@ func timePageIter(s scanner, rows int) iter.Seq2[time.Time, error] {
 			}
 		}
 	}
-
-}
-
-// Append appends a timestamp to the page. Returns true if data was appended;
-// false if the page was full.
-func (p *memTimePage) Append(ts time.Time) bool {
-	var (
-		rawValue    = ts.UnixNano()
-		encodeValue = ts.UnixNano()
-	)
-	if p.count > 0 {
-		// Delta-encode subsequent timestamps after the first entry.
-		encodeValue = rawValue - p.lastTS
-	}
-
-	buf, bufRelease := getVarint(encodeValue)
-	defer func() { bufRelease(&buf) }()
-
-	if len(p.buf) > 0 && len(buf)+len(p.buf) > p.maxPageSizeBytes {
-		return false
-	}
-
-	p.buf = append(p.buf, buf...)
-	p.lastTS = rawValue
-	p.count++
-	return true
-}
-
-// UncompressedSize is the size of the page in bytes.
-func (p *memTimePage) UncompressedSize() int {
-	return len(p.buf)
-}
-
-// Count returns the number of timestamps in the page.
-func (p *memTimePage) Count() int {
-	return p.count
-}
-
-// getUvarint returns a buffer containing the uvarint encoding of val. Call
-// release after using buf to return it to the pool.
-func getUvarint(val uint64) (buf []byte, release func(*[]byte)) {
-	bufPtr := varintPool.Get().(*[]byte)
-	buf = (*bufPtr)[:0]
-	buf = binary.AppendUvarint(buf, val)
-
-	// Our release function accepts a pointer to the buf to return to the pool to
-	// avoid having &buf escape to the heap; this reduces allocations by 1 per
-	// op.
-	return buf, func(b *[]byte) { varintPool.Put(b) }
-}
-
-// getVarint returns a buffer containing the varint encoding of val. Call
-// release after using buf to return it to the pool.
-func getVarint(val int64) (buf []byte, release func(*[]byte)) {
-	bufPtr := varintPool.Get().(*[]byte)
-	buf = (*bufPtr)[:0]
-	buf = binary.AppendVarint(buf, val)
-
-	// Our release function accepts a pointer to the buf to return to the pool to
-	// avoid having &buf escape to the heap; this reduces allocations by 1 per
-	// op.
-	return buf, func(b *[]byte) { varintPool.Put(b) }
 }

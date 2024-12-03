@@ -6,29 +6,24 @@ import (
 	"iter"
 )
 
-// TODO(rfratto): replace textColumn, timeColumn with column. Create
-// page_time.go and page_text.go.
-//
-// See other TODOs in this file; some details are changing that should be
-// handled (such as having memPage-scoped row numbers and column-scoped row
-// numbers).
-
 // column holds a column of data for a given RowType. Records are accumulated
-// in memory and then flushed to a [page] once the [memPage] is full.
+// in memory and then flushed to a [page] once the [headPage] is full.
 type column[RowType any] struct {
+	// columnRows tracks the number of rows in the column, not including the head
+	// page. It's updated when a page is cut.
+	columnRows int
+	headRows   int // headRows tracks the number of rows in the head page.
+
 	pages    []page
 	pageIter func(s scanner, rows int) iter.Seq2[RowType, error]
-	curPage  memPage[RowType]
+	curPage  headPage[RowType]
 }
 
-// Append a new record into the column. If the current [memPage] is full,
+// Append a new record into the column. If the current [headPage] is full,
 // Append cuts the page and then appends the record into the new page.
 func (c *column[RowType]) Append(row int, value RowType) {
-	// TODO(rfratto): translate column row index to memPage row index to avoid
-	// having column state leak into memPages.
-
 	// TODO(rfratto): should Append automatically handle backfilling so we don't
-	// have to pass the row down to the memPage?
+	// have to pass the row down to the headPage?
 
 	// We give two attempts to append the data to the page; if the current page
 	// is full, we cut it and append to the reset page.
@@ -36,7 +31,12 @@ func (c *column[RowType]) Append(row int, value RowType) {
 	// Appending to the reset page should never fail, as it'll allow its first
 	// record to be oversized. If it fails, there's a bug.
 	for range 2 {
-		if c.curPage.Append(row, value) {
+		// Translate the column row index to the head page row index. This must be
+		// done in the loop since the number of pages may change.
+		headRow := c.headRow(row)
+
+		if c.curPage.Append(headRow, value) {
+			c.updateHeadRowCount(headRow)
 			return
 		}
 		c.cutPage()
@@ -45,11 +45,30 @@ func (c *column[RowType]) Append(row int, value RowType) {
 	panic("column.Append: failed to append text to fresh page")
 }
 
+// headRow gets the head page row number from the column row number.
+func (c *column[RowType]) headRow(columnRow int) int {
+	return columnRow - c.columnRows
+}
+
+// updateHeadRowCount updates the head page's row count if the provided head
+// row is greater than the current row count.
+func (c *column[RowType]) updateHeadRowCount(headRow int) {
+	rows := headRow + 1 // Row is zero-indexed so the count of rows is row+1.
+
+	// Out-of-order row writes are not allowed and panic elsewhere, but to be
+	// safe we check here.
+	if rows > c.headRows {
+		c.headRows = rows
+	}
+}
+
 func (c *column[RowType]) cutPage() {
 	page, err := c.curPage.Flush()
 	if err != nil {
 		panic(fmt.Sprintf("failed to flush page: %v", err))
 	}
+	c.columnRows += page.RowCount
+	c.headRows = 0 // Reset the head page row count.
 	c.pages = append(c.pages, page)
 }
 
@@ -64,9 +83,7 @@ func (c *column[RowType]) Iter() iter.Seq2[RowType, error] {
 			}
 		}
 
-		curBytes, curRows := c.curPage.Data()
-		br := byteReader{buf: curBytes}
-		c.pageIter(&br, curRows)(yield)
+		headPageIter(c.curPage, c.pageIter)(yield)
 	}
 }
 
@@ -130,28 +147,73 @@ func (c *column[RowType]) Count() int {
 	return count
 }
 
-// memPage accumulates RowType records in memory for a [column].
-type memPage[RowType any] interface {
-	// Append a new RowType record into the memPage at the provided zero-indexed
-	// row number. Row numbers are scoped to the memPage and not the column.
+// UncompressedSize returns the total size of the column in bytes before
+// compression, including the data currently in the head page.
+func (c *column[RowType]) UncompressedSize() int {
+	var total int
+	for _, p := range c.pages {
+		total += p.UncompressedSize
+	}
+	total += headPageSize(c.curPage)
+	return total
+}
+
+// CompressedSize returns the total size of the column in bytes after
+// compression. If a page has no compression, its compressed size is the same
+// as its uncompressed size.
+//
+// If includeHead is true, the current uncompressed data in the head page is
+// included in the result.
+func (c *column[RowType]) CompressedSize(includeHead bool) int {
+	var total int
+	for _, p := range c.pages {
+		total += p.CompressedSize
+	}
+	if includeHead {
+		total += headPageSize(c.curPage)
+	}
+	return total
+}
+
+// headPage accumulates RowType records in memory for a [column].
+type headPage[RowType any] interface {
+	// Append a new RowType record into the headPage at the provided zero-indexed
+	// row number. Row numbers are scoped to the headPage and not the column.
 	//
 	// Append returns true if the data was appended; false if the page was full.
 	Append(row int, value RowType) bool
 
-	// Flush returns a page from the memPage, then resets the memPage for new
-	// data. After Flush is called, row numbers start back at 0.
-	Flush() (page, error)
-
-	// Data returns the current data in the memPage along with the number of
-	// rows. The returned buf must not be modified.
-	Data() (buf []byte, rows int)
-
-	// Backfill appends empty entries to the memPage up to the provided
-	// zero-indexed row number. For example, if the memPage is at row 1, and
-	// Backfill(5) is invoked, four empty entries will be appended to the column.
-	// Row numbers are scoped to the memPage and not the column.
+	// Backfill appends empty entries to the headPage up to (and including) the
+	// provided zero-indexed row number. For example, if there is one row in the
+	// head page (index 0), and Backfill(5) is invoked, five empty entries will
+	// be appended to the head page (index 1, 2, 3, 4, 5). Row numbers are scoped
+	// to the headPage and not the headPage and not the column.
 	//
 	// Backfill does nothing if the column already contains the provided number
 	// of rows.
 	Backfill(row int) bool
+
+	// Data returns the current data in the headPage along with the number of
+	// rows. The returned buf must not be modified.
+	Data() (buf []byte, rows int)
+
+	// Flush returns a page from the headPage, then resets the headPage for new
+	// data. After Flush is called, row numbers start back at 0.
+	Flush() (page, error)
+}
+
+// headPageSize returns the size of a headPage in bytes.
+func headPageSize[RowType any](p headPage[RowType]) int {
+	buf, _ := p.Data()
+	return len(buf)
+}
+
+func headPageIter[RowType any](
+	p headPage[RowType],
+	iter func(s scanner, rows int) iter.Seq2[RowType, error],
+) iter.Seq2[RowType, error] {
+
+	curBytes, curRows := p.Data()
+	br := byteReader{buf: curBytes}
+	return iter(&br, curRows)
 }

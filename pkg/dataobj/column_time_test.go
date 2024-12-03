@@ -8,16 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Benchmark_timeColumn(b *testing.B) {
+func Benchmark_newTimeColumn(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
-	c := &timeColumn{
-		maxPageSizeBytes: 4_000,
-	}
+	c := newTimeColumn(4_000)
 
 	nextTS := time.Now()
 
 	for i := 0; i < b.N; i++ {
-		c.Append(nextTS)
+		c.Append(i, nextTS)
 
 		// Add up to 5000ms of jitter to the next time.
 		nextTS = nextTS.Add(time.Duration(r.Intn(5000)) * time.Millisecond)
@@ -27,8 +25,8 @@ func Benchmark_timeColumn(b *testing.B) {
 	b.ReportMetric(float64(len(c.pages)), "pages")
 }
 
-func Test_timeColumn_Iter(t *testing.T) {
-	col := &timeColumn{maxPageSizeBytes: 4_000}
+func Test_newTimeColumn_Iter(t *testing.T) {
+	col := newTimeColumn(4_000)
 
 	r := rand.New(rand.NewSource(0))
 	nextTS := time.Now().UTC()
@@ -36,7 +34,7 @@ func Test_timeColumn_Iter(t *testing.T) {
 	var expect []time.Time
 
 	for len(col.pages) < 3 {
-		col.Append(nextTS)
+		col.Append(col.columnRows+col.headRows, nextTS)
 		expect = append(expect, nextTS)
 
 		nextTS = nextTS.Add(time.Duration(r.Intn(5000)) * time.Millisecond)
@@ -51,21 +49,21 @@ func Test_timeColumn_Iter(t *testing.T) {
 	require.Equal(t, expect, actual)
 }
 
-// Test_timePage_packing checks how many ordered timestamps can be stored
+// Test_headTimePage_packing checks how many ordered timestamps can be stored
 // in 1.5MB pages.
-func Test_timePage_packing(t *testing.T) {
+func Test_headTimePage_packing(t *testing.T) {
 	r := rand.New(rand.NewSource(0))
-	c := &memTimePage{
+	c := &headTimePage{
 		maxPageSizeBytes: 1_500_000, // 1.5MB
 	}
 
 	nextTS := time.Now()
 
-	for c.Append(nextTS) {
+	for c.Append(c.rows, nextTS) {
 		// Add up to 5000ms of jitter to the next timestamp.
 		nextTS = nextTS.Add(time.Duration(r.Intn(5000)) * time.Millisecond)
 	}
 
-	require.Greater(t, c.count, 0)
-	t.Logf("Packed %d timestamps into a single page", c.count)
+	require.Greater(t, c.rows, 0)
+	t.Logf("Packed %d timestamps into a single page", c.rows)
 }

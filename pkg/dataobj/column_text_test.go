@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_textColumn(t *testing.T) {
+func Test_newTextColumn(t *testing.T) {
 	strings := []string{
 		"Hello, world!",
 		"Goodbye, world!",
@@ -15,7 +15,7 @@ func Test_textColumn(t *testing.T) {
 		"Goodbye, again!",
 	}
 
-	col := textColumn{maxPageSizeBytes: 10}
+	col := newTextColumn(10)
 	for i, s := range strings {
 		col.Append(i, s)
 	}
@@ -37,8 +37,8 @@ func Test_zero_uvarint(t *testing.T) {
 	require.Equal(t, expected, actual)
 }
 
-func Test_textPage_Iter(t *testing.T) {
-	p := memTextPage{maxPageSizeBytes: 1_500_000}
+func Test_headTextPage_Iter(t *testing.T) {
+	p := headTextPage{maxPageSizeBytes: 1_500_000}
 
 	input := []struct {
 		row  int
@@ -52,12 +52,12 @@ func Test_textPage_Iter(t *testing.T) {
 		require.True(t, p.Append(in.row, in.text))
 	}
 
-	require.Equal(t, 6, p.count)
+	require.Equal(t, 6, p.rows)
 
 	expect := []string{"hello", "", "world", "", "", "!"}
 
 	var actual []string
-	for text, err := range p.Iter() {
+	for text, err := range headPageIter(&p, textPageIter) {
 		require.NoError(t, err)
 		actual = append(actual, text)
 	}
@@ -65,15 +65,15 @@ func Test_textPage_Iter(t *testing.T) {
 	require.Equal(t, expect, actual)
 }
 
-func Test_textPage_Backfill(t *testing.T) {
-	p := memTextPage{maxPageSizeBytes: 1_500_000}
+func Test_headTextPage_Backfill(t *testing.T) {
+	p := headTextPage{maxPageSizeBytes: 1_500_000}
 
 	require.True(t, p.Append(0, "Hello"))
 	require.True(t, p.Backfill(5))
 
-	require.Equal(t, 6, p.count)
+	require.Equal(t, 6, p.rows)
 
 	require.True(t, p.Append(6, "Goodbyte"))
 
-	require.Equal(t, 7, p.count)
+	require.Equal(t, 7, p.rows)
 }

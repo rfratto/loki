@@ -8,6 +8,7 @@ import (
 	"iter"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/grafana/dskit/flagext"
 	"github.com/grafana/loki/pkg/push"
@@ -78,6 +79,14 @@ func (b *Builder) Append(ctx context.Context, tenantID string, entries push.Push
 	}
 
 	// TODO(rfratto): Check if we need to flush after appending.
+	//
+	// We should flush if the set of data across all tenants exceeds
+	// MaxObjectSizeBytes. For now, we will have each tenant calculate its own
+	// size (and perhaps cache it since not every tenant gets updated at once).
+	//
+	// TODO(rfratto): Add a comment that we're not counting the size of metadata,
+	// but perhaps we should in the future.
+
 	return tenant.Append(ctx, entries)
 }
 
@@ -139,9 +148,9 @@ type stream struct {
 	builder *Builder
 	labels  labels.Labels
 
-	timestamp *timeColumn
-	metadata  map[string]*textColumn
-	logColumn *textColumn
+	timestamp *column[time.Time]
+	metadata  map[string]*column[string]
+	logColumn *column[string]
 	rows      int
 }
 
@@ -154,9 +163,9 @@ func (b *Builder) newStream(labels string) (*stream, error) {
 	return &stream{
 		builder:   b,
 		labels:    lbls,
-		timestamp: &timeColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
-		metadata:  make(map[string]*textColumn),
-		logColumn: &textColumn{maxPageSizeBytes: int(b.cfg.MaxPageSize)},
+		timestamp: newTimeColumn(uint64(b.cfg.MaxPageSize)),
+		metadata:  make(map[string]*column[string]),
+		logColumn: newTextColumn(uint64(b.cfg.MaxPageSize)),
 	}, nil
 }
 
@@ -257,7 +266,7 @@ func (s *stream) Append(ctx context.Context, entries []push.Entry) error {
 			return ctx.Err()
 		}
 
-		s.timestamp.Append(entry.Timestamp)
+		s.timestamp.Append(s.rows, entry.Timestamp)
 		for _, kvp := range entry.StructuredMetadata {
 			// Providing the row count here allows backfilling columns with NULLs.
 			s.getOrAddTextColumn(kvp.Name).Append(s.rows, kvp.Value)
@@ -270,10 +279,10 @@ func (s *stream) Append(ctx context.Context, entries []push.Entry) error {
 	return nil
 }
 
-func (s *stream) getOrAddTextColumn(key string) *textColumn {
+func (s *stream) getOrAddTextColumn(key string) *column[string] {
 	col, ok := s.metadata[key]
 	if !ok {
-		col = &textColumn{maxPageSizeBytes: int(s.builder.cfg.MaxPageSize)}
+		col = newTextColumn(uint64(s.builder.cfg.MaxPageSize))
 		s.metadata[key] = col
 	}
 	return col
@@ -287,4 +296,28 @@ func (s *stream) Backfill() {
 			col.Backfill(s.rows - 1)
 		}
 	}
+}
+
+// UncompressedSize returns the uncompressed size of all columns in the stream.
+func (s *stream) UncompressedSize() int {
+	var total int
+	total += s.timestamp.UncompressedSize()
+	for _, md := range s.metadata {
+		total += md.UncompressedSize()
+	}
+	total += s.logColumn.UncompressedSize()
+	return total
+}
+
+// CompressedSize returns the compressed size of all columns in the stream. If
+// includeHead is true, the current uncompressed data in head pages are counted
+// in the result.
+func (s *stream) CompressedSize(includeHead bool) int {
+	var total int
+	total += s.timestamp.CompressedSize(includeHead)
+	for _, md := range s.metadata {
+		total += md.CompressedSize(includeHead)
+	}
+	total += s.logColumn.CompressedSize(includeHead)
+	return total
 }
