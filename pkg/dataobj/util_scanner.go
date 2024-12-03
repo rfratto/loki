@@ -72,11 +72,13 @@ func (br *byteReader) Discard(n int) (int, error) {
 	return n, nil
 }
 
-// Peek returns the next n bytes without advancing the scanner. The bytes stop
-// being valid at the next read or discard call.
+// Peek returns up to the next n bytes without advancing the scanner. The bytes
+// stop being valid at the next read or discard call.
 func (br *byteReader) Peek(n int) ([]byte, error) {
+	var err error
 	if br.off+n > len(br.buf) {
-		return nil, io.EOF
+		n = len(br.buf) - br.off
+		err = io.EOF
 	}
-	return br.buf[br.off : br.off+n], nil
+	return br.buf[br.off : br.off+n], err
 }
