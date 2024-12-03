@@ -1,0 +1,191 @@
+// Package streams holds utilities for constructing data for the data object
+// streams section in memory, stored in a [Stream]. Use the builder package to
+// construct data objects from this data.
+package streams
+
+import (
+	"context"
+	"iter"
+	"maps"
+	"slices"
+	"time"
+
+	"github.com/grafana/loki/pkg/push"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
+)
+
+type Stream struct {
+	maxPageSize uint64
+	labels      labels.Labels
+
+	timestamp *Column[time.Time]
+	metadata  map[string]*Column[string]
+	logColumn *Column[string]
+	rows      int
+}
+
+func NewStream(maxPageSize uint64, labels string) (*Stream, error) {
+	lbls, err := parser.ParseMetric(labels)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Stream{
+		labels:    lbls,
+		timestamp: NewTimeColumn(uint64(maxPageSize)),
+		metadata:  make(map[string]*Column[string]),
+		logColumn: NewTextColumn(uint64(maxPageSize)),
+	}, nil
+}
+
+func (s *Stream) Iter() iter.Seq2[push.Entry, error] {
+	// Before we iterate, we must backfill all columns to guarantee all columns
+	// have the same number of rows.
+	s.Backfill()
+
+	return func(yield func(push.Entry, error) bool) {
+		pullTs, stopTs := iter.Pull2(s.timestamp.Iter())
+		defer stopTs()
+
+		pullColumns := s.metadataPullers()
+		defer func() {
+			for _, col := range pullColumns {
+				col.Stop()
+			}
+		}()
+
+		pullLog, stopLog := iter.Pull2(s.logColumn.Iter())
+		defer stopLog()
+
+		for {
+			var ent push.Entry
+
+			ts, err, ok := pullTs()
+			if err != nil {
+				yield(push.Entry{}, err)
+				return
+			} else if !ok {
+				return
+			}
+			ent.Timestamp = ts
+
+			for _, pullMetadata := range pullColumns {
+				val, err, ok := pullMetadata.NextValue()
+				if err != nil {
+					yield(push.Entry{}, err)
+					return
+				} else if !ok {
+					return
+				} else if val == "" {
+					continue
+				}
+
+				ent.StructuredMetadata = append(ent.StructuredMetadata, push.LabelAdapter{
+					Name:  pullMetadata.Key,
+					Value: val,
+				})
+			}
+
+			log, err, ok := pullLog()
+			if err != nil {
+				yield(push.Entry{}, err)
+				return
+			} else if !ok {
+				return
+			}
+
+			ent.Line = log
+			if !yield(ent, nil) {
+				return
+			}
+		}
+	}
+}
+
+type metadataPuller struct {
+	Key       string
+	NextValue func() (string, error, bool)
+	Stop      func()
+}
+
+// metadataPullers returns a sequence of metadataPuller instances for each
+// column.
+func (s *Stream) metadataPullers() []metadataPuller {
+	columnNames := slices.Collect(maps.Keys(s.metadata))
+
+	pullers := make([]metadataPuller, 0, len(columnNames))
+	for _, name := range columnNames {
+		next, stop := iter.Pull2(s.metadata[name].Iter())
+
+		puller := metadataPuller{
+			Key:       name,
+			NextValue: next,
+			Stop:      stop,
+		}
+		pullers = append(pullers, puller)
+	}
+	return pullers
+}
+
+func (s *Stream) Append(ctx context.Context, entries []push.Entry) error {
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return ctx.Err()
+		}
+
+		s.timestamp.Append(s.rows, entry.Timestamp)
+		for _, kvp := range entry.StructuredMetadata {
+			// Providing the row count here allows backfilling columns with NULLs.
+			s.getOrAddTextColumn(kvp.Name).Append(s.rows, kvp.Value)
+		}
+		s.logColumn.Append(s.rows, entry.Line)
+
+		s.rows++
+	}
+
+	return nil
+}
+
+func (s *Stream) getOrAddTextColumn(key string) *Column[string] {
+	col, ok := s.metadata[key]
+	if !ok {
+		col = NewTextColumn(uint64(s.maxPageSize))
+		s.metadata[key] = col
+	}
+	return col
+}
+
+// Backfill ensures all optional columns have the same number of rows as other columns.
+func (s *Stream) Backfill() {
+	for _, col := range s.metadata {
+		for col.Count() < s.rows {
+			// s.rows is a count, so we need to subtract 1 to get the last row index.
+			col.Backfill(s.rows - 1)
+		}
+	}
+}
+
+// UncompressedSize returns the uncompressed size of all columns in the stream.
+func (s *Stream) UncompressedSize() int {
+	var total int
+	total += s.timestamp.UncompressedSize()
+	for _, md := range s.metadata {
+		total += md.UncompressedSize()
+	}
+	total += s.logColumn.UncompressedSize()
+	return total
+}
+
+// CompressedSize returns the compressed size of all columns in the stream. If
+// includeHead is true, the current uncompressed data in head pages are counted
+// in the result.
+func (s *Stream) CompressedSize(includeHead bool) int {
+	var total int
+	total += s.timestamp.CompressedSize(includeHead)
+	for _, md := range s.metadata {
+		total += md.CompressedSize(includeHead)
+	}
+	total += s.logColumn.CompressedSize(includeHead)
+	return total
+}

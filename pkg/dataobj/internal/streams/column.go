@@ -1,4 +1,4 @@
-package dataobj
+package streams
 
 import (
 	"bufio"
@@ -6,22 +6,22 @@ import (
 	"iter"
 )
 
-// column holds a column of data for a given RowType. Records are accumulated
+// Column holds a Column of data for a given RowType. Records are accumulated
 // in memory and then flushed to a [page] once the [headPage] is full.
-type column[RowType any] struct {
+type Column[RowType any] struct {
 	// columnRows tracks the number of rows in the column, not including the head
 	// page. It's updated when a page is cut.
 	columnRows int
 	headRows   int // headRows tracks the number of rows in the head page.
 
-	pages    []page
+	pages    []Page
 	pageIter func(s scanner, rows int) iter.Seq2[RowType, error]
 	curPage  headPage[RowType]
 }
 
 // Append a new record into the column. If the current [headPage] is full,
 // Append cuts the page and then appends the record into the new page.
-func (c *column[RowType]) Append(row int, value RowType) {
+func (c *Column[RowType]) Append(row int, value RowType) {
 	// TODO(rfratto): should Append automatically handle backfilling so we don't
 	// have to pass the row down to the headPage?
 
@@ -46,13 +46,13 @@ func (c *column[RowType]) Append(row int, value RowType) {
 }
 
 // headRow gets the head page row number from the column row number.
-func (c *column[RowType]) headRow(columnRow int) int {
+func (c *Column[RowType]) headRow(columnRow int) int {
 	return columnRow - c.columnRows
 }
 
 // updateHeadRowCount updates the head page's row count if the provided head
 // row is greater than the current row count.
-func (c *column[RowType]) updateHeadRowCount(headRow int) {
+func (c *Column[RowType]) updateHeadRowCount(headRow int) {
 	rows := headRow + 1 // Row is zero-indexed so the count of rows is row+1.
 
 	// Out-of-order row writes are not allowed and panic elsewhere, but to be
@@ -62,7 +62,7 @@ func (c *column[RowType]) updateHeadRowCount(headRow int) {
 	}
 }
 
-func (c *column[RowType]) cutPage() {
+func (c *Column[RowType]) cutPage() {
 	page, err := c.curPage.Flush()
 	if err != nil {
 		panic(fmt.Sprintf("failed to flush page: %v", err))
@@ -74,7 +74,7 @@ func (c *column[RowType]) cutPage() {
 
 // Iter returns an iterator over all data in the column. Iteration stops until
 // all rows have been returned or upon encountering an error.
-func (c *column[RowType]) Iter() iter.Seq2[RowType, error] {
+func (c *Column[RowType]) Iter() iter.Seq2[RowType, error] {
 	return func(yield func(RowType, error) bool) {
 		// Iterate over cut pages.
 		for _, page := range c.pages {
@@ -87,7 +87,7 @@ func (c *column[RowType]) Iter() iter.Seq2[RowType, error] {
 	}
 }
 
-func (c *column[RowType]) iterPage(p page, yield func(RowType, error) bool) bool {
+func (c *Column[RowType]) iterPage(p Page, yield func(RowType, error) bool) bool {
 	var zero RowType
 
 	r, err := p.Reader()
@@ -118,7 +118,7 @@ func (c *column[RowType]) iterPage(p page, yield func(RowType, error) bool) bool
 //
 // Backfill does nothing if the column already contains the provided number of
 // rows.
-func (c *column[RowType]) Backfill(row int) {
+func (c *Column[RowType]) Backfill(row int) {
 	// We give two attempts to append the data to the page; if the current page
 	// is full, we cut it and append to the reset page.
 	//
@@ -135,7 +135,7 @@ func (c *column[RowType]) Backfill(row int) {
 }
 
 // Count returns the number of rows in the column.
-func (c *column[RowType]) Count() int {
+func (c *Column[RowType]) Count() int {
 	count := 0
 	for _, p := range c.pages {
 		count += p.RowCount
@@ -149,7 +149,7 @@ func (c *column[RowType]) Count() int {
 
 // UncompressedSize returns the total size of the column in bytes before
 // compression, including the data currently in the head page.
-func (c *column[RowType]) UncompressedSize() int {
+func (c *Column[RowType]) UncompressedSize() int {
 	var total int
 	for _, p := range c.pages {
 		total += p.UncompressedSize
@@ -164,7 +164,7 @@ func (c *column[RowType]) UncompressedSize() int {
 //
 // If includeHead is true, the current uncompressed data in the head page is
 // included in the result.
-func (c *column[RowType]) CompressedSize(includeHead bool) int {
+func (c *Column[RowType]) CompressedSize(includeHead bool) int {
 	var total int
 	for _, p := range c.pages {
 		total += p.CompressedSize
@@ -199,7 +199,7 @@ type headPage[RowType any] interface {
 
 	// Flush returns a page from the headPage, then resets the headPage for new
 	// data. After Flush is called, row numbers start back at 0.
-	Flush() (page, error)
+	Flush() (Page, error)
 }
 
 // headPageSize returns the size of a headPage in bytes.

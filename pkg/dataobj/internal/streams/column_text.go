@@ -1,4 +1,4 @@
-package dataobj
+package streams
 
 import (
 	"encoding/binary"
@@ -11,13 +11,13 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
-// newTextColumn creates a new column for storing text data.
-func newTextColumn(maxPageSizeBytes uint64) *column[string] {
+// NewTextColumn creates a new column for storing text data.
+func NewTextColumn(maxPageSizeBytes uint64) *Column[string] {
 	// text pages are compressed with GZIP, so we'll want to account for expected
 	// compression ratio when sizing the pages.
 	targetSize := targetCompressedPageSize(maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
 
-	return &column[string]{
+	return &Column[string]{
 		pageIter: textPageIter,
 		curPage: &headTextPage{
 			maxPageSizeBytes: targetSize,
@@ -116,13 +116,13 @@ func (p *headTextPage) Data() ([]byte, int) {
 }
 
 // Flush returns a page from p, then resets p for new data.
-func (p *headTextPage) Flush() (page, error) {
+func (p *headTextPage) Flush() (Page, error) {
 	buf, crc32, err := compressData(p.buf, streamsmd.COMPRESSION_GZIP)
 	if err != nil {
-		return page{}, fmt.Errorf("compressing text page: %w", err)
+		return Page{}, fmt.Errorf("compressing text page: %w", err)
 	}
 
-	newPage := page{
+	newPage := Page{
 		UncompressedSize: len(p.buf),
 		CompressedSize:   len(buf),
 		CRC32:            crc32,

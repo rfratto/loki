@@ -1,4 +1,4 @@
-package dataobj
+package streams
 
 import (
 	"encoding/binary"
@@ -11,9 +11,9 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
-// newTimeColumn creates a new column for storing timestamps.
-func newTimeColumn(maxPageSizeBytes uint64) *column[time.Time] {
-	return &column[time.Time]{
+// NewTimeColumn creates a new column for storing timestamps.
+func NewTimeColumn(maxPageSizeBytes uint64) *Column[time.Time] {
+	return &Column[time.Time]{
 		pageIter: timePageIter,
 		curPage: &headTimePage{
 			maxPageSizeBytes: maxPageSizeBytes,
@@ -110,15 +110,15 @@ func (p *headTimePage) Data() ([]byte, int) {
 }
 
 // Flush returns a page from p, then resets p for new data.
-func (p *headTimePage) Flush() (page, error) {
+func (p *headTimePage) Flush() (Page, error) {
 	// No compression is used for timestamps; it's unlikely that compression can
 	// make delta encoding more efficient.
 	buf, crc32, err := compressData(p.buf, streamsmd.COMPRESSION_NONE)
 	if err != nil {
-		return page{}, fmt.Errorf("compressing text page: %w", err)
+		return Page{}, fmt.Errorf("compressing text page: %w", err)
 	}
 
-	newPage := page{
+	newPage := Page{
 		UncompressedSize: len(p.buf),
 		CompressedSize:   len(buf),
 		CRC32:            crc32,

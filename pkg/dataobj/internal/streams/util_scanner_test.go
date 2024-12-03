@@ -1,4 +1,4 @@
-package dataobj
+package streams
 
 import (
 	"io"

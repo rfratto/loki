@@ -1,4 +1,4 @@
-package dataobj
+package streams
 
 import (
 	"bytes"
@@ -14,9 +14,9 @@ var (
 	checksumTable = crc32.MakeTable(crc32.Castagnoli)
 )
 
-// A page is a single unit of data within a column. It is encoded and
+// A Page is a single unit of data within a column. It is encoded and
 // optionally compressed.
-type page struct {
+type Page struct {
 	UncompressedSize int    // UncompressedSize is the size of the page before compression.
 	CompressedSize   int    // CompressedSize is the size of the page after compression.
 	CRC32            uint32 // CRC32 is the CRC32 checksum of the compressed page.
@@ -29,9 +29,9 @@ type page struct {
 	Data []byte // Data is the compressed and encoded page data.
 }
 
-// Reader returns a reader for decompresed page data. Reader returns an error
+// Reader returns a reader for decompressed page data. Reader returns an error
 // if the CRC32 fails to validate.
-func (p *page) Reader() (io.ReadCloser, error) {
+func (p *Page) Reader() (io.ReadCloser, error) {
 	if actual := crc32.Checksum(p.Data, checksumTable); p.CRC32 != actual {
 		return nil, fmt.Errorf("invalid crc32 checksum %x, expected %x", actual, p.CRC32)
 	}

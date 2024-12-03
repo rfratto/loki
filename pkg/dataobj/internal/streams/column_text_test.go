@@ -1,4 +1,4 @@
-package dataobj
+package streams
 
 import (
 	"encoding/binary"
@@ -15,7 +15,7 @@ func Test_newTextColumn(t *testing.T) {
 		"Goodbye, again!",
 	}
 
-	col := newTextColumn(10)
+	col := NewTextColumn(10)
 	for i, s := range strings {
 		col.Append(i, s)
 	}

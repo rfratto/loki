@@ -1,4 +1,4 @@
-package dataobj
+package streams
 
 import (
 	"math/rand"
@@ -10,7 +10,7 @@ import (
 
 func Benchmark_newTimeColumn(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
-	c := newTimeColumn(4_000)
+	c := NewTimeColumn(4_000)
 
 	nextTS := time.Now()
 
@@ -26,7 +26,7 @@ func Benchmark_newTimeColumn(b *testing.B) {
 }
 
 func Test_newTimeColumn_Iter(t *testing.T) {
-	col := newTimeColumn(4_000)
+	col := NewTimeColumn(4_000)
 
 	r := rand.New(rand.NewSource(0))
 	nextTS := time.Now().UTC()
