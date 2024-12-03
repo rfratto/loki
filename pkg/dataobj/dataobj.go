@@ -102,6 +102,26 @@ func (b *Builder) Close(ctx context.Context) error {
 	return errors.New("not implemented")
 }
 
+// uncompressedSize returns the uncompressed size of all data in the builder.
+func (b *Builder) uncompressedSize() int {
+	var total int
+	for _, tenant := range b.tenants {
+		total += tenant.UncompressedSize()
+	}
+	return total
+}
+
+// compressedSize returns the compressed size of all data in the builder. If
+// includeHead is true, the current uncompressed data in head pages are counted
+// in the result.
+func (b *Builder) compressedSize(includeHead bool) int {
+	var total int
+	for _, tenant := range b.tenants {
+		total += tenant.CompressedSize(includeHead)
+	}
+	return total
+}
+
 type tenant struct {
 	builder *Builder
 	ID      string
@@ -142,6 +162,26 @@ func (t *tenant) Append(ctx context.Context, entries push.PushRequest) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// UncompressedSize returns the uncompressed size of all streams in the tenant.
+func (t *tenant) UncompressedSize() int {
+	var total int
+	for _, stream := range t.streams {
+		total += stream.UncompressedSize()
+	}
+	return total
+}
+
+// CompressedSize returns the compressed size of all streams in the tenant. If
+// includeHead is true, the current uncompressed data in head pages are counted
+// in the result.
+func (t *tenant) CompressedSize(includeHead bool) int {
+	var total int
+	for _, stream := range t.streams {
+		total += stream.CompressedSize(includeHead)
+	}
+	return total
 }
 
 type stream struct {

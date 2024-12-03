@@ -26,6 +26,16 @@ func Test_stream(t *testing.T) {
 	req := readTestdataEntries(t, "./testdata/logs.txt.gz")
 	require.NoError(t, builder.Append(context.Background(), "fake", req))
 
+	var (
+		uncompressedSize = builder.uncompressedSize()
+		compressedSize   = builder.compressedSize(true)
+		compressionRatio = float64(compressedSize) / float64(uncompressedSize)
+	)
+
+	t.Logf("Uncompressed size: %d bytes", uncompressedSize)
+	t.Logf("Compressed size: %d bytes", compressedSize)
+	t.Logf("Compression ratio: %.2f", compressionRatio)
+
 	// Validate that iterating over each stream in the builder returns the same
 	// entries as the input.
 	for _, stream := range req.Streams {
@@ -35,9 +45,6 @@ func Test_stream(t *testing.T) {
 		require.True(t, ok, "missing tenant")
 		tenantStream, ok := builderTenant.streams[stream.Labels]
 		require.True(t, ok, "missing stream")
-
-		// Print stats about the stream. Add 1 to account for in-memory pages.
-		t.Logf("Stream %s: %d timestamp pages, %d log pages", stream.Labels, len(tenantStream.timestamp.pages)+1, len(tenantStream.logColumn.pages)+1)
 
 		var actual []push.Entry
 		for ent, err := range tenantStream.Iter() {
