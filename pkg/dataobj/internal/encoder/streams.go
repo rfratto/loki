@@ -1,4 +1,4 @@
-package builder
+package encoder
 
 import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"

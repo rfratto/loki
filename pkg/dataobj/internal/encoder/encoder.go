@@ -1,5 +1,5 @@
-// Package builder provides an API for constructing data objects.
-package builder
+// Package encoder provides an API for encoding data objects.
+package encoder
 
 import "io"
 
