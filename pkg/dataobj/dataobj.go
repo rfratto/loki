@@ -73,11 +73,8 @@ func (b *Builder) Append(ctx context.Context, tenantID string, entries push.Push
 		b.tenants[tenantID] = tenant
 	}
 
-	// TODO(rfratto): Check if we need to flush after appending.
-	//
-	// We should flush if the set of data across all tenants exceeds
-	// MaxObjectSizeBytes. For now, we will have each tenant calculate its own
-	// size (and perhaps cache it since not every tenant gets updated at once).
+	// TODO(rfratto): Check if we need to flush after appending. As flushing is
+	// per-tenant, we only need to check the size of the current tenant.
 	//
 	// TODO(rfratto): Add a comment that we're not counting the size of metadata,
 	// but perhaps we should in the future.
