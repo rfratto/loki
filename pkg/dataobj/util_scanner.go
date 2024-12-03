@@ -1,7 +1,14 @@
 package dataobj
 
-import "io"
+import (
+	"bufio"
+	"io"
+)
 
+// scanner is an interface for reading bytes from a stream. It extends
+// [io.Reader] and [io.ByteReader] with methods to get a set of bytes at once.
+//
+// scanner is implemented by [bufio.Reader] and [byteReader].
 type scanner interface {
 	io.Reader
 	io.ByteReader
@@ -17,6 +24,10 @@ type scanner interface {
 	// than the scanner's buffer size.
 	Peek(n int) ([]byte, error)
 }
+
+var (
+	_ scanner = (*bufio.Reader)(nil)
+)
 
 // byteReader allows for reading bytes from a slice. Unlike [bytes.NewBuffer],
 // it does not take ownership over the byte slice.
