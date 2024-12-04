@@ -14,10 +14,19 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
-// TODO(rfratto): At the moment this is being designed just for testing the
-// encoder. In the future, we'll want to introduce the ability for batching and
-// likely change the interface given to Open to pass context.Context instances
-// in.
+// TODO(rfratto): This package was hastily through together just for testing
+// the encoder. There's a few chagnes we'll want to make:
+//
+// 1. Design the API for batching, and likely change to an interface so there
+//    can be different object readers (cache, disk, object storage, etc).
+//
+// 2. Potentially combine the decoder and encoder into a single encoding
+//    package; this would centralize the constants (magic, format versions) but
+//    make the identifiers slightly more verbose.
+//
+// 3. Consider the CPU/memory overhead of the current implementation. There's a
+//    ton of intermediate allocations happening that may be avoidable or
+//    cheapened via pooling.
 
 // Object is an opened data object.
 type Object struct {
