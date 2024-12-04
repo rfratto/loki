@@ -2,9 +2,12 @@ package encoder_test
 
 import (
 	"bytes"
+	"iter"
 	"testing"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoder"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 	"github.com/prometheus/prometheus/promql/parser"
@@ -22,13 +25,14 @@ func Test(t *testing.T) {
 	streamsSection, err := obj.OpenStreams()
 	require.NoError(t, err)
 
-	stream, err := streamsSection.OpenStream(idFromString(`{env="qa"}`))
+	streamID := idFromString(`{env="qa"}`)
+	stream, err := streamsSection.OpenStream(streamID)
 	require.NoError(t, err)
 
 	col, err := stream.OpenColumn(streams.ColumnInfo{
 		Name:             "foo",
 		Type:             streamsmd.COLUMN_TYPE_METADATA,
-		RowsCount:        0,
+		RowsCount:        2,
 		CompressedSize:   10,
 		UncompressedSize: 10,
 
@@ -38,29 +42,30 @@ func Test(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = col.AppendPage(streams.Page{
+	pages := []streams.Page{{
 		UncompressedSize: 5,
 		CompressedSize:   5,
 		CRC32:            0,
+		RowCount:         1,
 
 		Compression: streamsmd.COMPRESSION_NONE,
 		Encoding:    streamsmd.ENCODING_PLAIN,
 
 		Data: []byte("hello"),
-	})
-	require.NoError(t, err)
-
-	err = col.AppendPage(streams.Page{
+	}, {
 		UncompressedSize: 5,
 		CompressedSize:   5,
 		CRC32:            0,
+		RowCount:         1,
 
 		Compression: streamsmd.COMPRESSION_NONE,
 		Encoding:    streamsmd.ENCODING_PLAIN,
 
 		Data: []byte("world"),
-	})
-	require.NoError(t, err)
+	}}
+	for _, page := range pages {
+		require.NoError(t, col.AppendPage(page))
+	}
 
 	require.NoError(t, col.Close())
 	require.NoError(t, stream.Close())
@@ -71,6 +76,50 @@ func Test(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, sz, int64(0))
 	require.Equal(t, sz, int64(buf.Len()))
+
+	// Additional tests with the decoder.
+	{
+		dec := decoder.Open(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, dec.Validate())
+
+		sections, err := dec.Sections()
+		require.NoError(t, err)
+		require.Len(t, sections, 1)
+		require.Equal(t, sections[0].Type, filemd.SECTION_TYPE_STREAMS)
+
+		streams, err := dec.Streams(sections[0])
+		require.NoError(t, err)
+		require.Len(t, streams, 1)
+		require.True(t, streamID.Equal(streams[0].Identifier), "Expected %v and %v to be equal", streamID, streams[0].Identifier)
+		require.Equal(t, streams[0].UncompressedSize, uint32(10))
+		require.Equal(t, streams[0].CompressedSize, uint32(10))
+
+		columns, err := dec.Columns(streams[0])
+		require.NoError(t, err)
+		require.Len(t, columns, 1)
+		require.Equal(t, columns[0].Name, "foo")
+		require.Equal(t, columns[0].Type, streamsmd.COLUMN_TYPE_METADATA)
+		require.Equal(t, columns[0].RowsCount, uint32(2))
+		require.Equal(t, columns[0].UncompressedSize, uint32(10))
+		require.Equal(t, columns[0].CompressedSize, uint32(10))
+		require.Equal(t, columns[0].Compression, streamsmd.COMPRESSION_NONE)
+		require.Nil(t, columns[0].Statistics)
+
+		readPages, err := collect(dec.Pages(columns[0]))
+		require.NoError(t, err)
+		require.Equal(t, pages, readPages)
+	}
+}
+
+func collect[ValueType any](it iter.Seq2[ValueType, error]) ([]ValueType, error) {
+	var values []ValueType
+	for value, err := range it {
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
 }
 
 func idFromString(s string) streamsmd.StreamIdentifier {
