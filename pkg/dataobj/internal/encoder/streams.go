@@ -37,7 +37,7 @@ type Stream struct {
 //
 // If opening a new column would exceed the maximum metadata size for Stream,
 // OpenColumn returns an error.
-func (s *Stream) OpenColumn() (*Column, error)
+func (s *Stream) OpenColumn(column *streamsmd.ColumnsMetadata) (*Column, error) // TODO(rfratto): use smaller type
 
 // Close the stream, writing it to the data object. After Close is called, there
 // can be no further modifications to the stream.

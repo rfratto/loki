@@ -23,6 +23,14 @@ import "io"
 // written to (and they accumulate data), there's no need for elements to
 // manually propagate the offset upwards; this happens as a side effect of them
 // passing their data to their parent.
+//
+// There may be some cases where an element needs to propagate an offset back
+// to the parent. For example, Streams.Close will need to inform Object of
+// where the section metadata was written; something the parent does not have
+// access to. However, one way this could be avoided would be by passing the
+// data and metadata to the parent separetely, either by two different
+// functions or two different arguments. This would allow the parent to
+// immediately know the offset of the metadata and use it.
 
 // Object is a data object. Data objects are hierarchical, split into distinct
 // sections that contain their own hierarchy. Only one element of the hierarchy
