@@ -10,7 +10,7 @@ import (
 
 func Benchmark_newTimeColumn(b *testing.B) {
 	r := rand.New(rand.NewSource(0))
-	c := NewTimeColumn(4_000)
+	c := NewTimestampColumn(4_000)
 
 	nextTS := time.Now()
 
@@ -26,7 +26,7 @@ func Benchmark_newTimeColumn(b *testing.B) {
 }
 
 func Test_newTimeColumn_Iter(t *testing.T) {
-	col := NewTimeColumn(4_000)
+	col := NewTimestampColumn(4_000)
 
 	r := rand.New(rand.NewSource(0))
 	nextTS := time.Now().UTC()

@@ -4,11 +4,17 @@ import (
 	"bufio"
 	"fmt"
 	"iter"
+
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 // Column holds a Column of data for a given RowType. Records are accumulated
 // in memory and then flushed to a [page] once the [headPage] is full.
 type Column[RowType any] struct {
+	name        string                    // Column name for user-specified columns.
+	ty          streamsmd.ColumnType      // Column type.
+	compression streamsmd.CompressionType // Compression used for column.
+
 	// columnRows tracks the number of rows in the column, not including the head
 	// page. It's updated when a page is cut.
 	columnRows int
@@ -173,6 +179,53 @@ func (c *Column[RowType]) CompressedSize(includeHead bool) int {
 		total += headPageSize(c.curPage)
 	}
 	return total
+}
+
+// ColumnInfo describes a column.
+type ColumnInfo struct {
+	Name string               // Name of the column; only set for user-specified columns.
+	Type streamsmd.ColumnType // Column type.
+
+	RowsCount        int // Total number of rows in the column.
+	CompressedSize   int // Total size of the column in bytes after compression.
+	UncompressedSize int // Total size of the column in bytes before compression.
+
+	CompressionType streamsmd.CompressionType // Compression type used for the column.
+
+	Statistics *streamsmd.Statistics // Optional column statistics.
+}
+
+// Info builds information about the column. If includeHead is true,
+// information about the current head page is included in the result.
+func (c *Column[RowType]) Info(includeHead bool) ColumnInfo {
+	var (
+		rowsCount        int
+		compressedSize   int
+		uncompressedSize int
+	)
+
+	for _, p := range c.pages {
+		rowsCount += p.RowCount
+		compressedSize += p.CompressedSize
+		uncompressedSize += p.UncompressedSize
+	}
+	if includeHead {
+		_, memRows := c.curPage.Data()
+
+		rowsCount += memRows
+		compressedSize += headPageSize(c.curPage)
+		uncompressedSize += headPageSize(c.curPage)
+	}
+
+	// TODO(rfratto): optionally build statistics.
+	return ColumnInfo{
+		Name: c.name,
+		Type: c.ty,
+
+		RowsCount:        rowsCount,
+		CompressedSize:   compressedSize,
+		UncompressedSize: uncompressedSize,
+	}
 }
 
 // headPage accumulates RowType records in memory for a [column].

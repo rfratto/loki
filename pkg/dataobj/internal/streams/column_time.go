@@ -11,9 +11,12 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
-// NewTimeColumn creates a new column for storing timestamps.
-func NewTimeColumn(maxPageSizeBytes uint64) *Column[time.Time] {
+// NewTimestampColumn creates a new column for storing timestamps.
+func NewTimestampColumn(maxPageSizeBytes uint64) *Column[time.Time] {
 	return &Column[time.Time]{
+		ty:          streamsmd.COLUMN_TYPE_TIMESTAMP,
+		compression: streamsmd.COMPRESSION_NONE,
+
 		pageIter: timePageIter,
 		curPage: &headTimePage{
 			maxPageSizeBytes: maxPageSizeBytes,

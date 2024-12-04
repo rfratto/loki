@@ -33,9 +33,9 @@ func NewStream(maxPageSize uint64, labels string) (*Stream, error) {
 
 	return &Stream{
 		labels:    lbls,
-		timestamp: NewTimeColumn(uint64(maxPageSize)),
+		timestamp: NewTimestampColumn(uint64(maxPageSize)),
 		metadata:  make(map[string]*Column[string]),
-		logColumn: NewTextColumn(uint64(maxPageSize)),
+		logColumn: NewLogColumn(uint64(maxPageSize)),
 	}, nil
 }
 
@@ -150,7 +150,7 @@ func (s *Stream) Append(ctx context.Context, entries []push.Entry) error {
 func (s *Stream) getOrAddTextColumn(key string) *Column[string] {
 	col, ok := s.metadata[key]
 	if !ok {
-		col = NewTextColumn(uint64(s.maxPageSize))
+		col = NewMetadataColumn(key, uint64(s.maxPageSize))
 		s.metadata[key] = col
 	}
 	return col

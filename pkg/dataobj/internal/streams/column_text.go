@@ -11,13 +11,35 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
-// NewTextColumn creates a new column for storing text data.
-func NewTextColumn(maxPageSizeBytes uint64) *Column[string] {
+func NewMetadataColumn(name string, maxPageSizeBytes uint64) *Column[string] {
 	// text pages are compressed with GZIP, so we'll want to account for expected
 	// compression ratio when sizing the pages.
 	targetSize := targetCompressedPageSize(maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
 
 	return &Column[string]{
+		name:        name,
+		ty:          streamsmd.COLUMN_TYPE_METADATA,
+		compression: streamsmd.COMPRESSION_GZIP,
+
+		pageIter: textPageIter,
+		curPage: &headTextPage{
+			maxPageSizeBytes: targetSize,
+
+			buf: make([]byte, 0, targetSize),
+		},
+	}
+}
+
+// NewLogColumn creates a new column for storing log lines.
+func NewLogColumn(maxPageSizeBytes uint64) *Column[string] {
+	// text pages are compressed with GZIP, so we'll want to account for expected
+	// compression ratio when sizing the pages.
+	targetSize := targetCompressedPageSize(maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
+
+	return &Column[string]{
+		ty:          streamsmd.COLUMN_TYPE_LOG_LINE,
+		compression: streamsmd.COMPRESSION_GZIP,
+
 		pageIter: textPageIter,
 		curPage: &headTextPage{
 			maxPageSizeBytes: targetSize,

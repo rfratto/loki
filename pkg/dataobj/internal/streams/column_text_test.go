@@ -15,7 +15,7 @@ func Test_newTextColumn(t *testing.T) {
 		"Goodbye, again!",
 	}
 
-	col := NewTextColumn(10)
+	col := NewLogColumn(10)
 	for i, s := range strings {
 		col.Append(i, s)
 	}
