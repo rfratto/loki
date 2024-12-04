@@ -15,34 +15,18 @@ const (
 
 var magic = []byte("THOR")
 
-// TODO(rfratto): The implementation of this package is going to require some
-// thought.
+// TODO(rfratto): This package currently works, but there's a few things to consider:
 //
-// It seems that the best way to do it is for each element to buffer as much of
-// its data in memory as it can (to allow for discarding), and only when it is
-// closed will it internally append its data to its parent.
+// 1. There's a few extra allocations that can be avoided; we should consider
+//    using a buffer pool for various elements.
 //
-// There will need to be some global offset tracking; Column.AppendPage will
-// need to know the Object-scoped offset where it would write its data so it
-// can put the appropriate offsets in the metadata.
+// 2. There's some cases where information is propagated back up to the parent
+//    in gross ways (see updateParentMetadata). A way of doing this without
+//    needing children elements to be aware of internal parent state would be
+//    preferred.
 //
-// Since only one element can be open at a time, it should be fairly easy to
-// pass that state around; the offset can propagate down from Object to any
-// element. When an element closes itself and passes its data to its parent,
-// the parent can update its offset based on the size of the data it received.
-//
-// Since elements have an effective "lock" on the section of the object being
-// written to (and they accumulate data), there's no need for elements to
-// manually propagate the offset upwards; this happens as a side effect of them
-// passing their data to their parent.
-//
-// There may be some cases where an element needs to propagate an offset back
-// to the parent. For example, Streams.Close will need to inform Object of
-// where the section metadata was written; something the parent does not have
-// access to. However, one way this could be avoided would be by passing the
-// data and metadata to the parent separetely, either by two different
-// functions or two different arguments. This would allow the parent to
-// immediately know the offset of the metadata and use it.
+// 3. We'll likely want to combine this package with the decoder package into a
+//    single "encoding" package. See the comment in decoder for more thoughts.
 
 // Object is a data object. Data objects are hierarchical, split into distinct
 // sections that contain their own hierarchy. Only one element of the hierarchy
