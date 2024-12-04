@@ -10,13 +10,6 @@ package dataobj.metadata.file.v1;
 
 option go_package = "github.com/grafana/loki/pkg/dataobj/internal/filemd";
 
-// Metadata of the data object.
-message Metadata {
-  // The list of sections stored within the data object. It is valid for there
-  // to be multiple sections of the same type.
-  repeated Section sections = 1;
-}
-
 // Section within a data object.
 message Section {
   // Type of the section within the data object.

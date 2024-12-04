@@ -105,10 +105,28 @@ func Test(t *testing.T) {
 		require.Equal(t, columns[0].Compression, streamsmd.COMPRESSION_NONE)
 		require.Nil(t, columns[0].Statistics)
 
-		readPages, err := collect(dec.Pages(columns[0]))
+		readPages, err := allPages(t, dec, columns[0])
 		require.NoError(t, err)
 		require.Equal(t, pages, readPages)
 	}
+}
+
+func allPages(t *testing.T, obj *decoder.Object, col streamsmd.Column) ([]streams.Page, error) {
+	var pages []streams.Page
+
+	headers, err := obj.Pages(col)
+	if err != nil {
+		return nil, err
+	}
+	for _, header := range headers {
+		page, err := obj.Page(header)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, page)
+	}
+
+	return pages, nil
 }
 
 func collect[ValueType any](it iter.Seq2[ValueType, error]) ([]ValueType, error) {

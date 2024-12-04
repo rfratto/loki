@@ -4,14 +4,6 @@ package dataobj.metadata.streams.v1;
 
 option go_package = "github.com/grafana/loki/pkg/dataobj/internal/streamsmd";
 
-// Metadata for the streams section.
-message Metadata {
-  // The list of streams stored within the streams section. Writers may choose
-  // to order streams for more effective searching; the order in the stream list
-  // does not need to match the order of streams written to the data object.
-  repeated Stream streams = 1;
-}
-
 // Stream describes an individual log stream within the streams section.
 message Stream {
   // Label set representing the stream.
@@ -24,11 +16,11 @@ message Stream {
   // uncompressed size if no compression is used.
   uint32 compressed_size = 3;
 
-  // Byte offset from the start of the data object to the ColumnsMetadata message.
-  uint32 columns_metadata_offset = 4;
+  // Byte offset from the start of the data object to the stream's metadata.
+  uint32 metadata_offset = 4;
 
-  // Size of the ColumnsMetadata message in bytes.
-  uint32 columns_metadata_size = 5;
+  // Size of the stream's metadata in bytes.
+  uint32 metadata_size = 5;
 }
 
 // StreamIdentifier represents a stream.
@@ -42,9 +34,8 @@ message StreamIdentifier {
   repeated Label labels = 1;
 }
 
-// ColumnsMetadata describes the set of columns for a stream. One
-// ColumnsMetadata is written to the data object per stream.
-message ColumnsMetadata {
+// Column describes an individual column within a stream.
+message Column {
   // Name of the column; set only for COLUMN_TYPE_METADATA.
   string name = 1;
 
@@ -64,11 +55,14 @@ message ColumnsMetadata {
   // match uncompressed size if no compression is used.
   uint32 compressed_size = 6;
 
-  // Byte offset from the start of the data object to the first page's header.
-  uint32 page0_header_offset = 7;
+  // Byte offset from the start of the data object to the column's metadata.
+  uint32 metadata_offset = 7;
+
+  // Size of the column's metadata in bytes.
+  uint32 metadata_size = 8;
 
   // Statistics for the column.
-  Statistics statistics = 8;
+  Statistics statistics = 9;
 }
 
 // ColumnType represents the valid types that a stream's column can have.
@@ -112,10 +106,8 @@ message Statistics {
   uint32 count_distinct_sketch = 3;
 }
 
-// PageHeader describes a page within the data object. PageHeader is written
-// before encoded + compressed page data. The actual page data is not
-// represented in protobuf.
-message PageHeader {
+// Page describes an individual page within a column.
+message Page {
   // Uncompressed size of the page within the data object.
   uint32 uncompressed_size = 1;
 
@@ -129,11 +121,20 @@ message PageHeader {
   // Number of rows in the page.
   uint32 rows_count = 4;
 
+  // Compression type used for the page.
+  CompressionType compression = 5;
+
   // Encoding type used for the page.
-  EncodingType encoding = 5;
+  EncodingType encoding = 6;
+
+  // Byte offset from the start of the data object to the page's data.
+  uint32 data_offset = 7;
+
+  // Size of the page's data in bytes.
+  uint32 data_size = 8;
 
   // Optional statistics for the page.
-  Statistics statistics = 6;
+  Statistics statistics = 9;
 }
 
 // EncodingType holds various encoding types for data within a page.

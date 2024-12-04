@@ -22,8 +22,7 @@ type Streams struct {
 	closed bool // closed specifies whether the Streams section has been closed.
 	inuse  bool // inuse specifies whether a Stream is currently open.
 
-	data []byte
-
+	data    []byte
 	streams []streamsmd.Stream
 }
 
@@ -143,8 +142,8 @@ func (s *Streams) append(data, metadata []byte) error {
 	}
 
 	// Update the stream entry with the offset and size of the metadata.
-	s.streams[len(s.streams)-1].ColumnsMetadataOffset = uint32(s.offset + len(s.data) + len(data))
-	s.streams[len(s.streams)-1].ColumnsMetadataSize = uint32(len(metadata))
+	s.streams[len(s.streams)-1].MetadataOffset = uint32(s.offset + len(s.data) + len(data))
+	s.streams[len(s.streams)-1].MetadataSize = uint32(len(metadata))
 
 	s.data = append(s.data, data...)
 	s.data = append(s.data, metadata...)
@@ -162,7 +161,7 @@ type Stream struct {
 	inuse  bool // inuse specifies whether a Column is currently open.
 
 	data    []byte
-	columns []streamsmd.ColumnsMetadata
+	columns []streamsmd.Column
 }
 
 // OpenColumn opens a new column in the stream. OpenColumn fails if there is
@@ -189,7 +188,7 @@ func (s *Stream) OpenColumn(column streams.ColumnInfo) (*Column, error) {
 	//
 	// TODO(rfratto): we shouldn't allow the caller to provide the size; they
 	// might not append every page held in memory.
-	s.columns = append(s.columns, streamsmd.ColumnsMetadata{
+	s.columns = append(s.columns, streamsmd.Column{
 		Name:             column.Name,
 		Type:             column.Type,
 		RowsCount:        uint32(column.RowsCount),
@@ -197,9 +196,6 @@ func (s *Stream) OpenColumn(column streams.ColumnInfo) (*Column, error) {
 		UncompressedSize: uint32(column.UncompressedSize),
 		CompressedSize:   uint32(column.CompressedSize),
 		Statistics:       column.Statistics,
-
-		// Page0HeaderOffset is the first byte of the data written by the column.
-		Page0HeaderOffset: uint32(columnOffset),
 	})
 	if md, err := s.buildMetadata(); err != nil {
 		return nil, err
@@ -306,6 +302,10 @@ func (s *Stream) append(data, metadata []byte) error {
 		return nil
 	}
 
+	// Update the column entry with the offset and size of the metadata.
+	s.columns[len(s.columns)-1].MetadataOffset = uint32(s.offset + len(s.data) + len(data))
+	s.columns[len(s.columns)-1].MetadataSize = uint32(len(metadata))
+
 	s.data = append(s.data, data...)
 	s.data = append(s.data, metadata...)
 	return nil
@@ -323,7 +323,8 @@ type Column struct {
 
 	closed bool // closed specifies whether the Column has been closed.
 
-	data []byte
+	data  []byte
+	pages []streamsmd.Page
 }
 
 // AppendPage appends a new page to the column. AppendPage fails if the column
@@ -336,30 +337,49 @@ func (c *Column) AppendPage(page streams.Page) error {
 		return ErrClosed
 	}
 
-	// TODO(rfratto): Move headers to ColumnsMetadata. Putting headers right
-	// before page data is fine for disk-based formats like Parquet, but isn't
-	// very object-storage friendly since it requires multiple fetches to get all
-	// page information.
-	//
-	// Changing this will require storing the offset of page data in the header.
-	header := streamsmd.PageHeader{
+	// TODO(rfratto): is calling c.buildMetadata for each page too expensive
+	// here? The size increases linearly with the number of streams. We may want
+	// to replace it with a constant-size estimate and use the max size as a soft
+	// limit.
+	c.pages = append(c.pages, streamsmd.Page{
 		UncompressedSize: uint32(page.UncompressedSize),
 		CompressedSize:   uint32(page.CompressedSize),
 		Crc32:            page.CRC32,
 		RowsCount:        uint32(page.RowCount),
+		Compression:      page.Compression,
 		Encoding:         page.Encoding,
 		Statistics:       page.Stats,
+
+		DataOffset: uint32(c.offset + len(c.data)),
+		DataSize:   uint32(len(page.Data)),
+	})
+	if md, err := c.buildMetadata(); err != nil {
+		return err
+	} else if len(md) > c.metadataSize {
+		return ErrMetadataSize
 	}
 
-	headerBytes, err := proto.Marshal(&header)
-	if err != nil {
-		return EncodingError{err}
-	}
-
-	c.data = binary.AppendUvarint(c.data, uint64(len(headerBytes)))
-	c.data = append(c.data, headerBytes...)
 	c.data = append(c.data, page.Data...)
 	return nil
+}
+
+// buildMetadata builds the set of []Page to be written as the metadata for the
+// Column.
+func (c *Column) buildMetadata() ([]byte, error) {
+	var buf []byte
+
+	buf = binary.AppendUvarint(buf, uint64(len(c.pages)))
+	for _, page := range c.pages {
+		pageBytes, err := proto.Marshal(&page)
+		if err != nil {
+			return nil, EncodingError{err}
+		}
+
+		buf = binary.AppendUvarint(buf, uint64(len(pageBytes)))
+		buf = append(buf, pageBytes...)
+	}
+
+	return buf, nil
 }
 
 // Close the column, writing it to the stream. After Close is called, there can
@@ -370,8 +390,14 @@ func (c *Column) Close() error {
 	}
 	c.closed = true
 
-	err := c.parent.append(c.data, nil) // Pass data to parent; Column has no metadata.
+	metadata, err := c.buildMetadata()
+	if err != nil {
+		return err
+	}
+
+	err = c.parent.append(c.data, metadata)
 	c.data = nil
+	c.pages = nil
 	return err
 }
 

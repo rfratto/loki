@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"iter"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -118,9 +117,9 @@ func (obj *Object) Streams(sec filemd.Section) ([]streamsmd.Stream, error) {
 	// directly from obj.r?
 	metadataBytes := make([]byte, sec.MetadataSize)
 	if sz, err := obj.r.Read(metadataBytes); err != nil {
-		return nil, fmt.Errorf("read metadata: %w", err)
+		return nil, fmt.Errorf("read section metadata: %w", err)
 	} else if uint32(sz) != sec.MetadataSize {
-		return nil, fmt.Errorf("read metadata: short read")
+		return nil, fmt.Errorf("read section metadata: short read")
 	}
 
 	metadataReader := bytes.NewReader(metadataBytes)
@@ -158,23 +157,23 @@ func (obj *Object) Streams(sec filemd.Section) ([]streamsmd.Stream, error) {
 }
 
 // Columns retrieves the set of columns from the provided stream.
-func (obj *Object) Columns(stream streamsmd.Stream) ([]streamsmd.ColumnsMetadata, error) {
-	if _, err := obj.r.Seek(int64(stream.ColumnsMetadataOffset), io.SeekStart); err != nil {
+func (obj *Object) Columns(stream streamsmd.Stream) ([]streamsmd.Column, error) {
+	if _, err := obj.r.Seek(int64(stream.MetadataOffset), io.SeekStart); err != nil {
 		return nil, err
 	}
 
 	// TODO(rfratto): do we really need this byte slice? Can't we read it
 	// directly from obj.r?
-	columnsBytes := make([]byte, stream.ColumnsMetadataSize)
+	columnsBytes := make([]byte, stream.MetadataSize)
 	if sz, err := obj.r.Read(columnsBytes); err != nil {
-		return nil, fmt.Errorf("read columns metadata: %w", err)
-	} else if uint32(sz) != stream.ColumnsMetadataSize {
-		return nil, fmt.Errorf("read columns metadata: short read")
+		return nil, fmt.Errorf("read stream metadata: %w", err)
+	} else if uint32(sz) != stream.MetadataSize {
+		return nil, fmt.Errorf("read stream metadata: short read")
 	}
 
 	columnsReader := bytes.NewReader(columnsBytes)
 
-	var columns []streamsmd.ColumnsMetadata
+	var columns []streamsmd.Column
 	columnCount, err := binary.ReadUvarint(columnsReader)
 	if err != nil {
 		return nil, fmt.Errorf("read column count: %w", err)
@@ -190,7 +189,7 @@ func (obj *Object) Columns(stream streamsmd.Stream) ([]streamsmd.ColumnsMetadata
 			return nil, fmt.Errorf("read column: %w", err)
 		}
 
-		var column streamsmd.ColumnsMetadata
+		var column streamsmd.Column
 		if proto.Unmarshal(columnBytes, &column) != nil {
 			return nil, fmt.Errorf("unmarshal column: %w", err)
 		}
@@ -202,19 +201,71 @@ func (obj *Object) Columns(stream streamsmd.Stream) ([]streamsmd.ColumnsMetadata
 }
 
 // Pages returns an iterator over pages from the provided column.
-func (obj *Object) Pages(col streamsmd.ColumnsMetadata) iter.Seq2[streams.Page, error] {
-	return func(yield func(streams.Page, error) bool) {
-		if _, err := obj.r.Seek(int64(col.Page0HeaderOffset), io.SeekStart); err != nil {
-			yield(streams.Page{}, err)
-			return
+func (obj *Object) Pages(col streamsmd.Column) ([]streamsmd.Page, error) {
+	if _, err := obj.r.Seek(int64(col.MetadataOffset), io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	// TODO(rfratto): do we really need this byte slice? Can't we read it
+	// directly from obj.r?
+	pagesBytes := make([]byte, col.MetadataSize)
+	if sz, err := obj.r.Read(pagesBytes); err != nil {
+		return nil, fmt.Errorf("read column metadata: %w", err)
+	} else if uint32(sz) != col.MetadataSize {
+		return nil, fmt.Errorf("read column metadata: short read")
+	}
+
+	pagesReader := bytes.NewReader(pagesBytes)
+
+	var pages []streamsmd.Page
+	pageCount, err := binary.ReadUvarint(pagesReader)
+	if err != nil {
+		return nil, fmt.Errorf("read page count: %w", err)
+	}
+	for range pageCount {
+		pageSize, err := binary.ReadUvarint(pagesReader)
+		if err != nil {
+			return nil, fmt.Errorf("read page size: %w", err)
 		}
 
-		// TODO(rfratto): We currently can't decode pages; we don't know when the
-		// set of pages ends. The fastest way to fix this is to add some kind of
-		// ending marker (such as header size 0).
-		//
-		// However, since we're planning on moving the set of pages to a metadata
-		// section, it probably makes sense to do that instead. That would give us
-		// the exact number of pages and their sizes.
+		pageBytes := make([]byte, pageSize)
+		if _, err := pagesReader.Read(pageBytes); err != nil {
+			return nil, fmt.Errorf("read page: %w", err)
+		}
+
+		var page streamsmd.Page
+		if proto.Unmarshal(pageBytes, &page) != nil {
+			return nil, fmt.Errorf("unmarshal page: %w", err)
+		}
+
+		pages = append(pages, page)
 	}
+
+	return pages, nil
+}
+
+func (obj *Object) Page(page streamsmd.Page) (streams.Page, error) {
+	if _, err := obj.r.Seek(int64(page.DataOffset), io.SeekStart); err != nil {
+		return streams.Page{}, err
+	}
+
+	data := make([]byte, page.DataSize)
+	if sz, err := obj.r.Read(data); err != nil {
+		return streams.Page{}, fmt.Errorf("read page data: %w", err)
+	} else if uint32(sz) != page.DataSize {
+		return streams.Page{}, fmt.Errorf("read page data: short read")
+	}
+
+	return streams.Page{
+		UncompressedSize: int(page.UncompressedSize),
+		CompressedSize:   int(page.CompressedSize),
+		CRC32:            uint32(page.Crc32),
+		RowCount:         int(page.RowsCount),
+
+		Compression: page.Compression,
+		Encoding:    page.Encoding,
+		Stats:       page.Statistics,
+
+		Data: data,
+	}, nil
 }
