@@ -2,6 +2,7 @@ package dataobj
 
 import (
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -11,9 +12,84 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/grafana/loki/pkg/push"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/stretchr/testify/require"
+	"github.com/thanos-io/objstore"
 )
+
+func Test(t *testing.T) {
+	bucket := objstore.NewInMemBucket()
+
+	builder := NewBuilder(BuilderConfig{
+		SHAPrefixSize: 2,
+
+		MaxPageSize:     1_500_000, // 1.5MB
+		MaxMetadataSize: 1_500_000, // 1.5MB
+
+		MaxObjectSizeBytes: 0, // Always flush for every append.
+	}, bucket)
+	defer builder.Close(context.Background())
+
+	req := readTestdataEntries(t, "./testdata/logs.txt.gz")
+	require.NoError(t, builder.Append(context.Background(), "fake", req))
+
+	objs, err := getObjects(context.Background(), bucket, "")
+	require.NoError(t, err)
+	require.Len(t, objs, 1)
+
+	obj, err := getObject(context.Background(), bucket, objs[0])
+	require.NoError(t, err)
+
+	// Try to see if the object has all the data we need.
+	{
+		sz, _ := obj.Seek(0, io.SeekEnd)
+		t.Logf("Object size: %s", humanize.Bytes(uint64(sz)))
+
+		dec := decoder.Open(obj)
+		require.NoError(t, dec.Validate())
+
+		sections, err := dec.Sections()
+		require.NoError(t, err)
+		require.Len(t, sections, 1)
+
+		streams, err := dec.Streams(sections[0])
+		require.NoError(t, err)
+		require.Len(t, streams, len(req.Streams))
+
+		for _, stream := range req.Streams {
+			// TODO(rfratto): find the input stream
+			// TODO(rfratto): decode the stream
+			_ = stream
+		}
+	}
+}
+
+func getObjects(ctx context.Context, bucket objstore.Bucket, dir string) ([]string, error) {
+	var objects []string
+
+	err := bucket.Iter(ctx, dir, func(name string) error {
+		objects = append(objects, name)
+		return nil
+	}, objstore.WithRecursiveIter())
+
+	return objects, err
+}
+
+func getObject(ctx context.Context, bucket objstore.Bucket, name string) (io.ReadSeeker, error) {
+	r, err := bucket.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	var buf bytes.Buffer
+	if _, err = io.Copy(&buf, r); err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(buf.Bytes()), nil
+}
 
 func Test_stream(t *testing.T) {
 	builder := NewBuilder(BuilderConfig{
