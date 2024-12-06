@@ -11,13 +11,14 @@ import (
 	"time"
 
 	"github.com/grafana/loki/pkg/push"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
 type Stream struct {
 	maxPageSize uint64
-	labels      labels.Labels
+	id          streamsmd.StreamIdentifier
 
 	timestamp *Column[time.Time]
 	metadata  map[string]*Column[string]
@@ -32,12 +33,39 @@ func NewStream(maxPageSize uint64, labels string) (*Stream, error) {
 	}
 
 	return &Stream{
-		labels:    lbls,
+		id:        labelsToIdentifier(lbls),
 		timestamp: NewTimestampColumn(uint64(maxPageSize)),
 		metadata:  make(map[string]*Column[string]),
 		logColumn: NewLogColumn(uint64(maxPageSize)),
 	}, nil
 }
+
+func labelsToIdentifier(lbls labels.Labels) streamsmd.StreamIdentifier {
+	res := streamsmd.StreamIdentifier{
+		Labels: make([]*streamsmd.StreamIdentifier_Label, 0, len(lbls)),
+	}
+
+	for _, lbl := range lbls {
+		res.Labels = append(res.Labels, &streamsmd.StreamIdentifier_Label{
+			Name:  lbl.Name,
+			Value: lbl.Value,
+		})
+	}
+
+	return res
+}
+
+// CutHead cuts the head page of all columns.
+func (s *Stream) CutHead() {
+	s.timestamp.cutPage()
+	for _, col := range s.metadata {
+		col.cutPage()
+	}
+	s.logColumn.cutPage()
+}
+
+// ID returns the stream's identifier. The returned value must not be modified.
+func (s *Stream) ID() streamsmd.StreamIdentifier { return s.id }
 
 func (s *Stream) Iter() iter.Seq2[push.Entry, error] {
 	// Before we iterate, we must backfill all columns to guarantee all columns
@@ -101,6 +129,28 @@ func (s *Stream) Iter() iter.Seq2[push.Entry, error] {
 			}
 		}
 	}
+}
+
+// Timestamp returns the timestamp column. The returned value must be treated
+// as read-only.
+func (s *Stream) Timestamp() *Column[time.Time] { return s.timestamp }
+
+// LogLine returns the log line column. The returned value must be treated as
+// read-only.
+func (s *Stream) LogLine() *Column[string] { return s.logColumn }
+
+// MetadataNames returns the set of metadata column names in sorted order.
+func (s *Stream) MetadataNames() []string {
+	res := slices.Collect(maps.Keys(s.metadata))
+	slices.Sort(res)
+	return res
+}
+
+// Metadata returns the metadata column with the provided name. The returned
+// value must be treated as read-only. If the column does not exist, Metadata
+// returns nil.
+func (s *Stream) Metadata(name string) *Column[string] {
+	return s.metadata[name]
 }
 
 type metadataPuller struct {

@@ -6,7 +6,6 @@ import (
 )
 
 var (
-	ErrMetadataSize = errors.New("metadata size exceeds maximum")
 	ErrElementExist = errors.New("open element already exists")
 	ErrClosed       = errors.New("element is closed")
 

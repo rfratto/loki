@@ -20,7 +20,7 @@ func Test(t *testing.T) {
 	// 1. Uses the streams package to create pages with real data.
 	// 2. Uses the decoder package to read the data back and validate it.
 
-	obj := encoder.New(1_500_000)
+	obj := encoder.New()
 
 	streamsSection, err := obj.OpenStreams()
 	require.NoError(t, err)

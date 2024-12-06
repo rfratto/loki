@@ -68,6 +68,7 @@ func (c *Column[RowType]) updateHeadRowCount(headRow int) {
 	}
 }
 
+// cutPage flushes the current head page to a [Page] and appends it to the column.
 func (c *Column[RowType]) cutPage() {
 	page, err := c.curPage.Flush()
 	if err != nil {
@@ -227,6 +228,13 @@ func (c *Column[RowType]) Info(includeHead bool) ColumnInfo {
 		UncompressedSize: uncompressedSize,
 	}
 }
+
+// Pages returns a read-only view of cut pages in c. Current data in the head
+// page is not included.
+//
+// The returned slice may be modified by calls to Append; make a copy if you
+// need to preserve the original slice.
+func (c *Column[RowType]) Pages() []Page { return c.pages }
 
 // headPage accumulates RowType records in memory for a [column].
 type headPage[RowType any] interface {

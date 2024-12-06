@@ -32,9 +32,8 @@ var magic = []byte("THOR")
 // sections that contain their own hierarchy. Only one element of the hierarchy
 // can be open at a given time.
 type Object struct {
-	metadataSize int
-	data         []byte
-	inuse        bool // inuse specifies whether an element is currently open.
+	data  []byte
+	inuse bool // inuse specifies whether an element is currently open.
 
 	// sections is the accumulating list of sections in the data object. The last
 	// element is partially filled while inuse is true.
@@ -42,10 +41,8 @@ type Object struct {
 }
 
 // New creates a new Object where metadata is limited to the specified size.
-func New(maxMetadataSize int) *Object {
-	return &Object{
-		metadataSize: maxMetadataSize,
-	}
+func New() *Object {
+	return &Object{}
 }
 
 // OpenStreams opens a streams section in the object. OpenStreams fails if
@@ -60,24 +57,20 @@ func (o *Object) OpenStreams() (*Streams, error) {
 
 	// The filemd.Section entry starts incomplete; we can't know the offset of
 	// the metadata until all data has been written.
-	//
-	// Calling o.buildMetadata is less expensive compared to other elements as
-	// there will be significantly less sections in the file overall.
 	o.sections = append(o.sections, filemd.Section{Type: filemd.SECTION_TYPE_STREAMS})
-	if md, err := o.buildMetadata(); err != nil {
-		return nil, err
-	} else if len(md) > o.metadataSize {
-		o.sections = o.sections[:len(o.sections)-1]
-		return nil, ErrMetadataSize
-	}
 
 	o.inuse = true
 	return &Streams{
 		parent: o,
 
-		metadataSize: o.metadataSize,
-		offset:       len(o.data),
+		offset: len(o.data),
 	}, nil
+}
+
+// MetadataSize returns an estimate of the current metadata size.
+func (o *Object) MetadataSize() int {
+	md, _ := o.buildMetadata()
+	return len(md)
 }
 
 // buildMetadata builds the set of []filemd.Section to be written as the file

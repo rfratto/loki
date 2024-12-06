@@ -16,8 +16,7 @@ const (
 type Streams struct {
 	parent *Object
 
-	metadataSize int // Max metadata size.
-	offset       int // Byte offset in the file where the Streams section begins.
+	offset int // Byte offset in the file where the Streams section begins.
 
 	closed bool // closed specifies whether the Streams section has been closed.
 	inuse  bool // inuse specifies whether a Stream is currently open.
@@ -44,26 +43,25 @@ func (s *Streams) OpenStream(id streamsmd.StreamIdentifier) (*Stream, error) {
 	// to the encoder.
 	//
 	// We allow the caller to pass information about its size upwards.
-	//
-	// TODO(rfratto): is calling s.buildMetadata for each stream too expensive
-	// here? The size increases linearly with the number of streams. We may want
-	// to replace it with a constant-size estimate and use the max size as a soft
-	// limit.
 	s.streams = append(s.streams, streamsmd.Stream{Identifier: &id})
-	if md, err := s.buildMetadata(); err != nil {
-		return nil, err
-	} else if len(md) > s.metadataSize {
-		s.streams = s.streams[:len(s.streams)-1]
-		return nil, ErrMetadataSize
-	}
 
 	s.inuse = true
 	return &Stream{
 		parent: s,
 
-		metadataSize: s.metadataSize,
-		offset:       s.offset + len(s.data),
+		offset: s.offset + len(s.data),
 	}, nil
+}
+
+// MetadataSize returns an estimate of the current metadata size.
+func (s *Streams) MetadataSize() int {
+	// TODO(rfratto): is calling s.buildMetadata for too expensive here? Callers
+	// will likely invoke MetadataSize for each stream appended; each subsequent
+	// call requires a bigger allocation.
+	//
+	// We might want to return a true estimate here.
+	md, _ := s.buildMetadata()
+	return len(md)
 }
 
 // buildMetadata builds the set of []streamsmd.Stream to be written as the
@@ -154,8 +152,7 @@ func (s *Streams) append(data, metadata []byte) error {
 type Stream struct {
 	parent *Streams
 
-	metadataSize int // Max metadata size.
-	offset       int // Byte offset in the file where the Stream begins.
+	offset int // Byte offset in the file where the Stream begins.
 
 	closed bool // closed specifies whether the Stream has been closed.
 	inuse  bool // inuse specifies whether a Column is currently open.
@@ -178,16 +175,6 @@ func (s *Stream) OpenColumn(column streams.ColumnInfo) (*Column, error) {
 
 	columnOffset := s.offset + len(s.data)
 
-	// Add the new column and check to see if the metadata has exceeded the size
-	// limit.
-	//
-	// TODO(rfratto): is calling s.buildMetadata for each column too expensive
-	// here? The size increases linearly with the number of columns. We may want
-	// to replace it with a constant-size estimate and use the max size as a soft
-	// limit.
-	//
-	// TODO(rfratto): we shouldn't allow the caller to provide the size; they
-	// might not append every page held in memory.
 	s.columns = append(s.columns, streamsmd.Column{
 		Name:             column.Name,
 		Type:             column.Type,
@@ -197,20 +184,24 @@ func (s *Stream) OpenColumn(column streams.ColumnInfo) (*Column, error) {
 		CompressedSize:   uint32(column.CompressedSize),
 		Statistics:       column.Statistics,
 	})
-	if md, err := s.buildMetadata(); err != nil {
-		return nil, err
-	} else if len(md) > s.metadataSize {
-		s.columns = s.columns[:len(s.columns)-1]
-		return nil, ErrMetadataSize
-	}
 
 	s.inuse = true
 	return &Column{
 		parent: s,
 
-		metadataSize: s.metadataSize,
-		offset:       columnOffset,
+		offset: columnOffset,
 	}, nil
+}
+
+// MetadataSize returns an estimate of the current metadata size.
+func (s *Stream) MetadataSize() int {
+	// TODO(rfratto): is calling s.buildMetadata for too expensive here? Callers
+	// will likely invoke MetadataSize for each column appended; each subsequent
+	// call requires a bigger allocation.
+	//
+	// We might want to return a true estimate here.
+	md, _ := s.buildMetadata()
+	return len(md)
 }
 
 // buildMetadata builds the set of ColumnsMetadata for the stream.
@@ -318,8 +309,7 @@ type Column struct {
 
 	parent *Stream
 
-	metadataSize int // Max metadata size.
-	offset       int // Byte offset in the file where the Column begins.
+	offset int // Byte offset in the file where the Column begins.
 
 	closed bool // closed specifies whether the Column has been closed.
 
@@ -337,10 +327,6 @@ func (c *Column) AppendPage(page streams.Page) error {
 		return ErrClosed
 	}
 
-	// TODO(rfratto): is calling c.buildMetadata for each page too expensive
-	// here? The size increases linearly with the number of streams. We may want
-	// to replace it with a constant-size estimate and use the max size as a soft
-	// limit.
 	c.pages = append(c.pages, streamsmd.Page{
 		UncompressedSize: uint32(page.UncompressedSize),
 		CompressedSize:   uint32(page.CompressedSize),
@@ -353,14 +339,20 @@ func (c *Column) AppendPage(page streams.Page) error {
 		DataOffset: uint32(c.offset + len(c.data)),
 		DataSize:   uint32(len(page.Data)),
 	})
-	if md, err := c.buildMetadata(); err != nil {
-		return err
-	} else if len(md) > c.metadataSize {
-		return ErrMetadataSize
-	}
 
 	c.data = append(c.data, page.Data...)
 	return nil
+}
+
+// MetadataSize returns an estimate of the current metadata size.
+func (c *Column) MetadataSize() int {
+	// TODO(rfratto): is calling s.buildMetadata for too expensive here? Callers
+	// will likely invoke MetadataSize for each page appended; each subsequent
+	// call requires a bigger allocation.
+	//
+	// We might want to return a true estimate here.
+	md, _ := c.buildMetadata()
+	return len(md)
 }
 
 // buildMetadata builds the set of []Page to be written as the metadata for the
