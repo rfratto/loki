@@ -1,0 +1,93 @@
+package dataobj
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"iter"
+	"time"
+
+	"github.com/grafana/loki/pkg/push"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/thanos-io/objstore"
+)
+
+var errIterationStopped = errors.New("iteration stopped")
+
+// Reader connects to an object store bucket and supports reading data objects.
+type Reader struct {
+	bucket objstore.Bucket
+}
+
+// NewReader creates a new Reader that answers questions about data objects
+// inside bucket.
+func NewReader(bucket objstore.Bucket) *Reader {
+	return &Reader{
+		bucket: bucket,
+	}
+}
+
+// Objects returns an iterator over all data objects for the provided tenant.
+// If ctx is canceled during iteration, the iterator stops immediately.
+//
+// If r's bucket does not support iteration, no objects are returned.
+func (r *Reader) Objects(ctx context.Context, tenant string) iter.Seq[string] {
+	tenantPath := fmt.Sprintf("tenant-%s/objects/", tenant)
+
+	return func(yield func(string) bool) {
+		r.bucket.Iter(ctx, tenantPath, func(name string) error {
+			if !yield(name) {
+				return errIterationStopped
+			}
+			return nil
+		}, objstore.WithRecursiveIter())
+	}
+}
+
+// Streams returns an iterator over all streams for the provided object. If an
+// error is encountered, the iterator returns the error and stops.
+func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.Labels, error] {
+	// TODO(rfratto): impl
+	//
+	// Before implementing this, we need to update the decoder package to use an
+	// interface instead of always accepting an io.ReadSeeker.
+
+	return func(yield func(labels.Labels, error) bool) {
+		yield(nil, fmt.Errorf("NYI"))
+	}
+}
+
+// EntriesOptions customizes the filtering behaviour of [Reader.Entries].
+type EntriesOptions struct {
+	// MinTime and MaxTime are inclusive bounds for the time range of
+	// [push.Entry] instances to return.
+	//
+	// If MinTime or MaxTime is nil, the bound is not applied.
+	MinTime, MaxTime *time.Time
+
+	GetAllMetadata bool     // Gets all metadata if true. Mutually exclusive with GetMetadata.
+	GetMetadata    []string // Gets only the specified metadata keys. Mutually exclusive with GetAllMetadata.
+	GetLine        bool     // Gets the log line if true.
+
+	// MetadtaFilter is an optional filtering function which filters out entire
+	// entries based on metadata key-value pairs. MetadataFilter is invoked once
+	// for each retrieved metadata key-value pair encountered. If MetadataFilter
+	// returns false, the entry is filtered out.
+	MetadataFilter func(name, value string) bool
+
+	// TODO(rfratto): how far should we go with filtering options? Should it
+	// explicitly support log filters? The MetadataFilter should enable filtering
+	// out most log pages, but dataobj is really intended for very low-level
+	// querying.
+}
+
+// Entries returns an iterator over [push.Entry] items found in the object for
+// the provided stream. EntriesOptions provides basic filtering options. If an
+// error is encountered, the iterator returns the error and stops.
+func (r *Reader) Entries(ctx context.Context, object string, stream labels.Labels, opts EntriesOptions) iter.Seq2[push.Entry, error] {
+	// TODO(rfratto): impl
+
+	return func(yield func(push.Entry, error) bool) {
+		yield(push.Entry{}, fmt.Errorf("NYI"))
+	}
+}

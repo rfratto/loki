@@ -122,6 +122,8 @@ func (b *Builder) Flush(ctx context.Context) error {
 }
 
 func (b *Builder) flush(ctx context.Context, tenantID string) error {
+	// TODO(rfratto): skip if there's no data?
+
 	tenant, ok := b.tenants[tenantID]
 	if !ok {
 		// No work to do.

@@ -79,8 +79,7 @@ func Test(t *testing.T) {
 
 	// Additional tests with the decoder.
 	{
-		dec := decoder.Open(bytes.NewReader(buf.Bytes()))
-		require.NoError(t, dec.Validate())
+		dec := decoder.OpenReadSeeker(bytes.NewReader(buf.Bytes()))
 
 		sections, err := dec.Sections()
 		require.NoError(t, err)
@@ -111,7 +110,7 @@ func Test(t *testing.T) {
 	}
 }
 
-func allPages(t *testing.T, obj *decoder.Object, col streamsmd.Column) ([]streams.Page, error) {
+func allPages(t *testing.T, obj *decoder.ReadSeekerObject, col streamsmd.Column) ([]streams.Page, error) {
 	var pages []streams.Page
 
 	headers, err := obj.Pages(col)

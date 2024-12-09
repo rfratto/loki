@@ -7,14 +7,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/grafana/loki/pkg/push"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
 )
@@ -35,35 +36,43 @@ func Test(t *testing.T) {
 	req := readTestdataEntries(t, "./testdata/logs.txt.gz")
 	require.NoError(t, builder.Append(context.Background(), "fake", req))
 
-	objs, err := getObjects(context.Background(), bucket, "")
-	require.NoError(t, err)
-	require.Len(t, objs, 1)
+	reader := NewReader(bucket)
 
-	obj, err := getObject(context.Background(), bucket, objs[0])
-	require.NoError(t, err)
+	objects := slices.Collect(reader.Objects(context.Background(), "fake"))
+	require.Len(t, objects, 1)
 
 	// Try to see if the object has all the data we need.
 	{
-		sz, _ := obj.Seek(0, io.SeekEnd)
-		t.Logf("Object size: %s", humanize.Bytes(uint64(sz)))
-
-		dec := decoder.Open(obj)
-		require.NoError(t, dec.Validate())
-
-		sections, err := dec.Sections()
-		require.NoError(t, err)
-		require.Len(t, sections, 1)
-
-		streams, err := dec.Streams(sections[0])
+		streams, err := collectFailable(reader.Streams(context.Background(), objects[0]))
 		require.NoError(t, err)
 		require.Len(t, streams, len(req.Streams))
 
 		for _, stream := range req.Streams {
-			// TODO(rfratto): find the input stream
-			// TODO(rfratto): decode the stream
-			_ = stream
+			lbls, err := parser.ParseMetric(stream.Labels)
+			require.NoError(t, err)
+
+			entriesIter := reader.Entries(context.Background(), objects[0], lbls, EntriesOptions{
+				GetAllMetadata: true,
+				GetLine:        true,
+			})
+			entries, err := collectFailable(entriesIter)
+			require.NoError(t, err)
+			require.Equal(t, stream.Entries, entries, "Mismatched entries for stream %s", stream.Labels)
 		}
 	}
+}
+
+// colectFailable collects all values from an iterator, returning an error if
+// the iterator encounters an error.
+func collectFailable[T any](iter iter.Seq2[T, error]) ([]T, error) {
+	var res []T
+	for v, err := range iter {
+		if err != nil {
+			return res, err
+		}
+		res = append(res, v)
+	}
+	return res, nil
 }
 
 func getObjects(ctx context.Context, bucket objstore.Bucket, dir string) ([]string, error) {
