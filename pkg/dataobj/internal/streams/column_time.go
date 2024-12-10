@@ -8,6 +8,7 @@ import (
 	"iter"
 	"time"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
@@ -140,7 +141,7 @@ func (p *headTimePage) Flush() (Page, error) {
 
 // timePageIter returns an iterator that reads delta-encoded timestamps from a
 // scanner.
-func timePageIter(s scanner, rows int) iter.Seq2[time.Time, error] {
+func timePageIter(s scanner.Scanner, rows int) iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		if rows == 0 {
 			return

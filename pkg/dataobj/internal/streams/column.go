@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"iter"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
@@ -21,7 +22,7 @@ type Column[RowType any] struct {
 	headRows   int // headRows tracks the number of rows in the head page.
 
 	pages    []Page
-	pageIter func(s scanner, rows int) iter.Seq2[RowType, error]
+	pageIter func(s scanner.Scanner, rows int) iter.Seq2[RowType, error]
 	curPage  headPage[RowType]
 }
 
@@ -271,10 +272,10 @@ func headPageSize[RowType any](p headPage[RowType]) int {
 
 func headPageIter[RowType any](
 	p headPage[RowType],
-	iter func(s scanner, rows int) iter.Seq2[RowType, error],
+	iter func(s scanner.Scanner, rows int) iter.Seq2[RowType, error],
 ) iter.Seq2[RowType, error] {
 
 	curBytes, curRows := p.Data()
-	br := byteReader{buf: curBytes}
-	return iter(&br, curRows)
+	sr := scanner.FromSlice(curBytes)
+	return iter(sr, curRows)
 }

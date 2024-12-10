@@ -7,9 +7,13 @@ import (
 	"iter"
 	"time"
 
-	"github.com/grafana/loki/pkg/push"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/objstore"
+
+	"github.com/grafana/loki/pkg/push"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 var errIterationStopped = errors.New("iteration stopped")
@@ -47,13 +51,44 @@ func (r *Reader) Objects(ctx context.Context, tenant string) iter.Seq[string] {
 // Streams returns an iterator over all streams for the provided object. If an
 // error is encountered, the iterator returns the error and stops.
 func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.Labels, error] {
+	dec := decoder.BucketDecoder(r.bucket, object)
+
 	// TODO(rfratto): impl
 	//
 	// Before implementing this, we need to update the decoder package to use an
 	// interface instead of always accepting an io.ReadSeeker.
 
 	return func(yield func(labels.Labels, error) bool) {
-		yield(nil, fmt.Errorf("NYI"))
+		sections, err := dec.Sections(ctx)
+		if err != nil {
+			yield(nil, fmt.Errorf("reading sections: %w", err))
+			return
+		}
+
+		for _, sec := range sections {
+			if sec.Type != filemd.SECTION_TYPE_STREAMS {
+				continue
+			}
+
+			streamsDec, err := dec.StreamsDecoder(sec)
+			if err != nil {
+				yield(nil, fmt.Errorf("decoding streams: %w", err))
+				return
+			}
+
+			streams, err := streamsDec.Streams(ctx)
+			if err != nil {
+				yield(nil, fmt.Errorf("reading streams: %w", err))
+				return
+			}
+
+			for _, stream := range streams {
+				lbls := streamsmd.Labels(stream.Identifier)
+				if !yield(lbls, nil) {
+					return
+				}
+			}
+		}
 	}
 }
 

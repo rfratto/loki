@@ -3,12 +3,9 @@ package decoder
 import (
 	"bufio"
 	"context"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"iter"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/thanos-io/objstore"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
@@ -43,7 +40,7 @@ func (bd *bucketDecoder) Sections(ctx context.Context) (res []filemd.Section, er
 	}
 	defer rc.Close()
 
-	metadataSize, err := readTailer(rc)
+	metadataSize, err := scanTailer(bufio.NewReaderSize(rc, 8))
 	if err != nil {
 		return nil, fmt.Errorf("reading file tailer: %w", err)
 	}
@@ -54,63 +51,7 @@ func (bd *bucketDecoder) Sections(ctx context.Context) (res []filemd.Section, er
 	}
 	defer rc.Close()
 
-	return readSections(bufio.NewReader(rc))
-}
-
-type reader interface {
-	io.Reader
-	io.ByteReader
-}
-
-// readTailer reads the last 8 bytes of the file to retrieve the metadata size
-// and the magic value.
-func readTailer(r io.Reader) (metadataSize uint32, err error) {
-	if err := binary.Read(r, binary.LittleEndian, &metadataSize); err != nil {
-		return 0, fmt.Errorf("reading metadata size: %w", err)
-	}
-
-	var magic [4]byte
-	if _, err := r.Read(magic[:]); err != nil {
-		return metadataSize, fmt.Errorf("reading magic: %w", err)
-	} else if string(magic[:]) != "THOR" {
-		return metadataSize, fmt.Errorf("invalid magic: %x", magic)
-	}
-
-	return
-}
-
-func readSections(r reader) ([]filemd.Section, error) {
-	fileFormatVersion, err := binary.ReadUvarint(r)
-	if err != nil {
-		return nil, fmt.Errorf("read file format version: %w", err)
-	} else if fileFormatVersion != 1 { // TODO(rfratto): replace with constant
-		return nil, fmt.Errorf("unsupported file format version: %d", fileFormatVersion)
-	}
-
-	var sections []filemd.Section
-	sectionCount, err := binary.ReadUvarint(r)
-	if err != nil {
-		return nil, fmt.Errorf("read section count: %w", err)
-	}
-	for range sectionCount {
-		sectionSize, err := binary.ReadUvarint(r)
-		if err != nil {
-			return nil, fmt.Errorf("read section size: %w", err)
-		}
-
-		sectionBytes := make([]byte, sectionSize)
-		if _, err := r.Read(sectionBytes); err != nil {
-			return nil, fmt.Errorf("read section: %w", err)
-		}
-
-		var section filemd.Section
-		if proto.Unmarshal(sectionBytes, &section) != nil {
-			return nil, fmt.Errorf("unmarshal section: %w", err)
-		}
-		sections = append(sections, section)
-	}
-
-	return sections, nil
+	return scanFileMetadata(bufio.NewReader(rc))
 }
 
 func (bd *bucketDecoder) StreamsDecoder(sec filemd.Section) (StreamsDecoder, error) {
