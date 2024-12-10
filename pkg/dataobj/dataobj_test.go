@@ -31,7 +31,6 @@ func Test(t *testing.T) {
 
 		MaxObjectSizeBytes: 0, // Always flush for every append.
 	}, bucket)
-	defer builder.Close(context.Background())
 
 	req := readTestdataEntries(t, "./testdata/logs.txt.gz")
 	require.NoError(t, builder.Append(context.Background(), "fake", req))
@@ -106,7 +105,6 @@ func Test_stream(t *testing.T) {
 		MaxMetadataSize:    4096, // 4KB
 		MaxObjectSizeBytes: 1_500_000,
 	}, nil)
-	defer builder.Close(context.Background())
 
 	req := readTestdataEntries(t, "./testdata/logs.txt.gz")
 	require.NoError(t, builder.Append(context.Background(), "fake", req))
