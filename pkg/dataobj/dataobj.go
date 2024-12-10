@@ -16,6 +16,7 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 	"github.com/thanos-io/objstore"
+	"go.uber.org/atomic"
 )
 
 // TODO(rfratto): validate the BuilderConfig with min/max limits; page size and
@@ -62,6 +63,8 @@ type BuilderConfig struct {
 // Methods on Builder are not goroutine safe; callers are responsible for
 // synchronizing calls.
 type Builder struct {
+	closed atomic.Bool
+
 	cfg    BuilderConfig
 	bucket objstore.Bucket
 
@@ -80,6 +83,10 @@ func NewBuilder(cfg BuilderConfig, bucket objstore.Bucket) *Builder {
 // Append buffers entries to be written as a data object. If enough data has
 // been accumulated, Append will trigger a flush to object storage.
 func (b *Builder) Append(ctx context.Context, tenantID string, entries push.PushRequest) error {
+	if b.closed.Load() {
+		return fmt.Errorf("builder is closed")
+	}
+
 	if b.tenants == nil {
 		b.tenants = make(map[string]*tenant)
 	}
@@ -106,6 +113,13 @@ func (b *Builder) Append(ctx context.Context, tenantID string, entries push.Push
 // storage. Calling Flush may result in a no-op if there is no buffered data to
 // flush.
 func (b *Builder) Flush(ctx context.Context) error {
+	if !b.closed.CAS(false, true) {
+		return fmt.Errorf("builder is closed")
+	}
+	return b.flushAllTenants(ctx)
+}
+
+func (b *Builder) flushAllTenants(ctx context.Context) error {
 	var errs []error
 
 	for tenantID := range b.tenants {
@@ -250,8 +264,13 @@ func (b *Builder) flush(ctx context.Context, tenantID string) error {
 // Close triggers a final [Builder.Flush] before releasing resources. New data
 // may not be appended to a closed Builder.
 func (b *Builder) Close(ctx context.Context) error {
-	// TODO(rfratto): impl
-	return errors.New("not implemented")
+	// Close isn't required at the moment, but it's easier to make it part of the
+	// API now than to add it later and potentially forget to update a caller.
+
+	if !b.closed.CompareAndSwap(false, true) {
+		return fmt.Errorf("builder is closed")
+	}
+	return b.flushAllTenants(ctx)
 }
 
 // uncompressedSize returns the uncompressed size of all data in the builder.
