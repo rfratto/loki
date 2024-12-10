@@ -56,6 +56,9 @@ type BuilderConfig struct {
 // flush appended data to object storage after an Append based on its
 // configuration. A flush can be manually triggered by calling [Builder.Flush].
 //
+// Once a builder is no longer needed, call [Builder.Close] to trigger a final
+// flush and release resources.
+//
 // Methods on Builder are not goroutine safe; callers are responsible for
 // synchronizing calls.
 type Builder struct {
@@ -242,6 +245,13 @@ func (b *Builder) flush(ctx context.Context, tenantID string) error {
 
 	path := fmt.Sprintf("tenant-%s/objects/%s/%s", tenantID, sumStr[:b.cfg.SHAPrefixSize], sumStr[b.cfg.SHAPrefixSize:])
 	return b.bucket.Upload(ctx, path, bytes.NewReader(buf.Bytes()))
+}
+
+// Close triggers a final [Builder.Flush] before releasing resources. New data
+// may not be appended to a closed Builder.
+func (b *Builder) Close(ctx context.Context) error {
+	// TODO(rfratto): impl
+	return errors.New("not implemented")
 }
 
 // uncompressedSize returns the uncompressed size of all data in the builder.
