@@ -13,15 +13,11 @@ import (
 )
 
 // TODO(rfratto): This package was hastily through together just for testing
-// the encoder. There's a few chagnes we'll want to make:
+// the encoder. There's a few changes we'll want to make:
 //
 // 1. Potentially combine the decoder and encoder into a single encoding
 //    package; this would centralize the constants (magic, format versions) but
 //    make the identifiers slightly more verbose.
-//
-// 2. Consider the CPU/memory overhead of the current implementation. There's a
-//    ton of intermediate allocations happening that may be avoidable or
-//    cheapened via pooling.
 
 // Decoders. To cleanly separate the APIs per section, each section has its own
 // Decoder interface which is created by the top-level Decoder interface.
@@ -31,15 +27,14 @@ type (
 		// Sections returns the list of sections in a data object.
 		Sections(ctx context.Context) ([]filemd.Section, error)
 
-		// StreamDecoder returns a StreamDecoder for the provided streams section.
-		// StreamsDecoder fails if sec is not a streams section.
-		StreamsDecoder(sec filemd.Section) (StreamsDecoder, error)
+		// StreamDecoder returns a StreamDecoder.
+		StreamsDecoder() StreamsDecoder
 	}
 
 	// StreamsDecoder supports decoding data from a streams section.
 	StreamsDecoder interface {
 		// Streams returns the set of streams from the StreamsDecoder.
-		Streams(ctx context.Context) ([]streamsmd.Stream, error)
+		Streams(ctx context.Context, sec filemd.Section) ([]streamsmd.Stream, error)
 
 		// Columns returns the set of columns within a stream.
 		Columns(ctx context.Context, stream streamsmd.Stream) ([]streamsmd.Column, error)

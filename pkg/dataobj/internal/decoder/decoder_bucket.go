@@ -71,26 +71,24 @@ func (bd *bucketDecoder) tailer(ctx context.Context) (tailer, error) {
 	}, nil
 }
 
-func (bd *bucketDecoder) StreamsDecoder(sec filemd.Section) (StreamsDecoder, error) {
+func (bd *bucketDecoder) StreamsDecoder() StreamsDecoder {
+	return &bucketStreamsDecoder{
+		bucket: bd.bucket,
+		path:   bd.path,
+	}
+}
+
+type bucketStreamsDecoder struct {
+	bucket objstore.BucketReader
+	path   string
+}
+
+func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec filemd.Section) ([]streamsmd.Stream, error) {
 	if sec.Type != filemd.SECTION_TYPE_STREAMS {
 		return nil, fmt.Errorf("unsupported section type: %s", sec.Type)
 	}
 
-	return &bucketStreamsDecoder{
-		bucket:  bd.bucket,
-		path:    bd.path,
-		section: sec,
-	}, nil
-}
-
-type bucketStreamsDecoder struct {
-	bucket  objstore.BucketReader
-	path    string
-	section filemd.Section
-}
-
-func (bd *bucketStreamsDecoder) Streams(ctx context.Context) ([]streamsmd.Stream, error) {
-	rc, err := bd.bucket.GetRange(ctx, bd.path, int64(bd.section.MetadataOffset), int64(bd.section.MetadataSize))
+	rc, err := bd.bucket.GetRange(ctx, bd.path, int64(sec.MetadataOffset), int64(sec.MetadataSize))
 	if err != nil {
 		return nil, fmt.Errorf("reading streams section metadata: %w", err)
 	}

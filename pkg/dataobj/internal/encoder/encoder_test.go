@@ -87,10 +87,9 @@ func Test(t *testing.T) {
 		require.Len(t, sections, 1)
 		require.Equal(t, sections[0].Type, filemd.SECTION_TYPE_STREAMS)
 
-		streamsDec, err := dec.StreamsDecoder(sections[0])
-		require.NoError(t, err)
+		streamsDec := dec.StreamsDecoder()
 
-		streams, err := streamsDec.Streams(context.Background())
+		streams, err := streamsDec.Streams(context.Background(), sections[0])
 		require.NoError(t, err)
 		require.Len(t, streams, 1)
 		require.True(t, streamID.Equal(streams[0].Identifier), "Expected %v and %v to be equal", streamID, streams[0].Identifier)

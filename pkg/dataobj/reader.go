@@ -70,13 +70,8 @@ func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.La
 				continue
 			}
 
-			streamsDec, err := dec.StreamsDecoder(sec)
-			if err != nil {
-				yield(nil, fmt.Errorf("decoding streams: %w", err))
-				return
-			}
-
-			streams, err := streamsDec.Streams(ctx)
+			streamsDec := dec.StreamsDecoder()
+			streams, err := streamsDec.Streams(ctx, sec)
 			if err != nil {
 				yield(nil, fmt.Errorf("reading streams: %w", err))
 				return
