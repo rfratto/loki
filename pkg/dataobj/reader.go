@@ -123,6 +123,6 @@ func (r *Reader) Entries(ctx context.Context, object string, stream labels.Label
 	// TODO(rfratto): impl
 
 	return func(yield func(push.Entry, error) bool) {
-		yield(push.Entry{}, fmt.Errorf("NYI"))
+		yield(push.Entry{}, fmt.Errorf("NYI: Reader.Entries"))
 	}
 }

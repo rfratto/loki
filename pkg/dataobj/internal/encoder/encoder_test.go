@@ -2,6 +2,7 @@ package encoder_test
 
 import (
 	"bytes"
+	"context"
 	"iter"
 	"testing"
 
@@ -79,21 +80,24 @@ func Test(t *testing.T) {
 
 	// Additional tests with the decoder.
 	{
-		dec := decoder.OpenReadSeeker(bytes.NewReader(buf.Bytes()))
+		dec := decoder.ReadSeekerDecoder(bytes.NewReader(buf.Bytes()))
 
-		sections, err := dec.Sections()
+		sections, err := dec.Sections(context.Background())
 		require.NoError(t, err)
 		require.Len(t, sections, 1)
 		require.Equal(t, sections[0].Type, filemd.SECTION_TYPE_STREAMS)
 
-		streams, err := dec.Streams(sections[0])
+		streamsDec, err := dec.StreamsDecoder(sections[0])
+		require.NoError(t, err)
+
+		streams, err := streamsDec.Streams(context.Background())
 		require.NoError(t, err)
 		require.Len(t, streams, 1)
 		require.True(t, streamID.Equal(streams[0].Identifier), "Expected %v and %v to be equal", streamID, streams[0].Identifier)
 		require.Equal(t, streams[0].UncompressedSize, uint32(10))
 		require.Equal(t, streams[0].CompressedSize, uint32(10))
 
-		columns, err := dec.Columns(streams[0])
+		columns, err := streamsDec.Columns(context.Background(), streams[0])
 		require.NoError(t, err)
 		require.Len(t, columns, 1)
 		require.Equal(t, columns[0].Name, "foo")
@@ -104,21 +108,22 @@ func Test(t *testing.T) {
 		require.Equal(t, columns[0].Compression, streamsmd.COMPRESSION_NONE)
 		require.Nil(t, columns[0].Statistics)
 
-		readPages, err := allPages(t, dec, columns[0])
+		readPages, err := allPages(t, streamsDec, columns[0])
 		require.NoError(t, err)
 		require.Equal(t, pages, readPages)
 	}
 }
 
-func allPages(t *testing.T, obj *decoder.ReadSeekerObject, col streamsmd.Column) ([]streams.Page, error) {
+func allPages(t *testing.T, dec decoder.StreamsDecoder, col streamsmd.Column) ([]streams.Page, error) {
 	var pages []streams.Page
 
-	headers, err := obj.Pages(col)
+	headers, err := dec.Pages(context.Background(), col)
 	if err != nil {
 		return nil, err
 	}
-	for _, header := range headers {
-		page, err := obj.Page(header)
+
+	it := dec.ReadPages(context.Background(), headers)
+	for page, err := range it {
 		if err != nil {
 			return nil, err
 		}
