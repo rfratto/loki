@@ -107,13 +107,13 @@ func Test(t *testing.T) {
 		require.Equal(t, columns[0].Compression, streamsmd.COMPRESSION_NONE)
 		require.Nil(t, columns[0].Statistics)
 
-		readPages, err := allPages(t, streamsDec, columns[0])
+		readPages, err := allPages(streamsDec, columns[0])
 		require.NoError(t, err)
 		require.Equal(t, pages, readPages)
 	}
 }
 
-func allPages(t *testing.T, dec decoder.StreamsDecoder, col streamsmd.Column) ([]streams.Page, error) {
+func allPages(dec decoder.StreamsDecoder, col streamsmd.Column) ([]streams.Page, error) {
 	var pages []streams.Page
 
 	headers, err := dec.Pages(context.Background(), col)

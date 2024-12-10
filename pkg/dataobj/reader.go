@@ -53,11 +53,6 @@ func (r *Reader) Objects(ctx context.Context, tenant string) iter.Seq[string] {
 func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.Labels, error] {
 	dec := decoder.BucketDecoder(r.bucket, object)
 
-	// TODO(rfratto): impl
-	//
-	// Before implementing this, we need to update the decoder package to use an
-	// interface instead of always accepting an io.ReadSeeker.
-
 	return func(yield func(labels.Labels, error) bool) {
 		sections, err := dec.Sections(ctx)
 		if err != nil {
