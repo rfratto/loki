@@ -1,6 +1,7 @@
 package streams
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,6 +12,37 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
+
+// IterTimePage returns an iterator over a page of values in a timestamp-based
+// column. IterTextPage yields an error if the column does not contain time or
+// the page could not be read.
+func IterTimePage(col streamsmd.Column, page Page) iter.Seq2[time.Time, error] {
+	return func(yield func(time.Time, error) bool) {
+		var zero time.Time
+
+		if !isTimeColumn(col) {
+			yield(zero, fmt.Errorf("column type %s does not contain timestamp data", col.Type))
+			return
+		}
+
+		rc, err := page.Reader()
+		if err != nil {
+			yield(zero, fmt.Errorf("opening page reader: %w", err))
+			return
+		}
+		defer rc.Close()
+
+		if page.Encoding != streamsmd.ENCODING_DELTA {
+			yield(zero, fmt.Errorf("unsupported encoding %s for timestamp column", page.Encoding))
+			return
+		}
+		timePageIter(bufio.NewReader(rc), page.RowCount)(yield)
+	}
+}
+
+func isTimeColumn(col streamsmd.Column) bool {
+	return col.Type == streamsmd.COLUMN_TYPE_TIMESTAMP
+}
 
 // NewTimestampColumn creates a new column for storing timestamps.
 func NewTimestampColumn(maxPageSizeBytes uint64) *Column[time.Time] {

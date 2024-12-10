@@ -105,7 +105,7 @@ func Test_stream(t *testing.T) {
 		MaxPageSize:        4096, // 4KB
 		MaxMetadataSize:    4096, // 4KB
 		MaxObjectSizeBytes: 1_500_000,
-	}, nil)
+	}, objstore.NewInMemBucket())
 	defer builder.Close(context.Background())
 
 	req := readTestdataEntries(t, "./testdata/logs.txt.gz")

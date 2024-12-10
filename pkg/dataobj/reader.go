@@ -51,12 +51,28 @@ func (r *Reader) Objects(ctx context.Context, tenant string) iter.Seq[string] {
 // Streams returns an iterator over all streams for the provided object. If an
 // error is encountered, the iterator returns the error and stops.
 func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.Labels, error] {
+	return func(yield func(labels.Labels, error) bool) {
+		for stream, err := range r.streams(ctx, object) {
+			if err != nil {
+				yield(nil, fmt.Errorf("reading streams: %w", err))
+				return
+			}
+
+			lbls := streamsmd.Labels(stream.Identifier)
+			if !yield(lbls, nil) {
+				return
+			}
+		}
+	}
+}
+
+func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[streamsmd.Stream, error] {
 	dec := decoder.BucketDecoder(r.bucket, object)
 
-	return func(yield func(labels.Labels, error) bool) {
+	return func(yield func(streamsmd.Stream, error) bool) {
 		sections, err := dec.Sections(ctx)
 		if err != nil {
-			yield(nil, fmt.Errorf("reading sections: %w", err))
+			yield(streamsmd.Stream{}, fmt.Errorf("reading sections: %w", err))
 			return
 		}
 
@@ -68,13 +84,12 @@ func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.La
 			streamsDec := dec.StreamsDecoder()
 			streams, err := streamsDec.Streams(ctx, sec)
 			if err != nil {
-				yield(nil, fmt.Errorf("reading streams: %w", err))
+				yield(streamsmd.Stream{}, fmt.Errorf("reading streams: %w", err))
 				return
 			}
 
 			for _, stream := range streams {
-				lbls := streamsmd.Labels(stream.Identifier)
-				if !yield(lbls, nil) {
+				if !yield(stream, nil) {
 					return
 				}
 			}
@@ -111,8 +126,32 @@ type EntriesOptions struct {
 // error is encountered, the iterator returns the error and stops.
 func (r *Reader) Entries(ctx context.Context, object string, stream labels.Labels, opts EntriesOptions) iter.Seq2[push.Entry, error] {
 	// TODO(rfratto): impl
+	dec := decoder.BucketDecoder(r.bucket, object).StreamsDecoder()
 
 	return func(yield func(push.Entry, error) bool) {
+		for in, err := range r.streams(ctx, object) {
+			if err != nil {
+				yield(push.Entry{}, fmt.Errorf("reading streams: %w", err))
+				return
+			}
+
+			inLabels := streamsmd.Labels(in.Identifier)
+			if !labels.Equal(inLabels, stream) {
+				continue
+			}
+
+			for entry, err := range newEntryIterator(dec, in, opts).Iter() {
+				if err != nil {
+					yield(push.Entry{}, fmt.Errorf("iterating entries: %w", err))
+					return
+				}
+
+				if !yield(entry, nil) {
+					return
+				}
+			}
+		}
+
 		yield(push.Entry{}, fmt.Errorf("NYI: Reader.Entries"))
 	}
 }

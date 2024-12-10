@@ -1,6 +1,7 @@
 package streams
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,6 +12,35 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
+
+// IterTextPage returns an iterator over a page of values in a text-based
+// column. IterTextPage yields an error if the column does not contain text or
+// the page could not be read.
+func IterTextPage(col streamsmd.Column, page Page) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		if !isTextColumn(col) {
+			yield("", fmt.Errorf("column type %s does not contain text data", col.Type))
+			return
+		}
+
+		rc, err := page.Reader()
+		if err != nil {
+			yield("", fmt.Errorf("opening page reader: %w", err))
+			return
+		}
+		defer rc.Close()
+
+		if page.Encoding != streamsmd.ENCODING_PLAIN {
+			yield("", fmt.Errorf("unsupported encoding %s for text column", page.Encoding))
+			return
+		}
+		textPageIter(bufio.NewReader(rc), page.RowCount)(yield)
+	}
+}
+
+func isTextColumn(col streamsmd.Column) bool {
+	return col.Type == streamsmd.COLUMN_TYPE_LOG_LINE || col.Type == streamsmd.COLUMN_TYPE_METADATA
+}
 
 func NewMetadataColumn(name string, maxPageSizeBytes uint64) *Column[string] {
 	// text pages are compressed with GZIP, so we'll want to account for expected
