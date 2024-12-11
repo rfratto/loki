@@ -2,6 +2,7 @@ package streams
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"iter"
 
@@ -276,6 +277,5 @@ func headPageIter[RowType any](
 ) iter.Seq2[RowType, error] {
 
 	curBytes, curRows := p.Data()
-	sr := scanner.FromSlice(curBytes)
-	return iter(sr, curRows)
+	return iter(bytes.NewReader(curBytes), curRows)
 }

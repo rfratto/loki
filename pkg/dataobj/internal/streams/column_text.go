@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"strings"
 	"unsafe"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
@@ -226,20 +227,15 @@ func textPageIter(s scanner.Scanner, rows int) iter.Seq2[string, error] {
 				}
 
 			default: // String
-				textBytes, err := s.Peek(int(size))
-				if errors.Is(err, io.EOF) {
-					// TODO(rfratto): log; unexpected early EOF
-					yield("", err)
+				var sb strings.Builder
+				sb.Grow(int(size))
+				if _, err := io.Copy(&sb, io.LimitReader(s, int64(size))); err != nil {
+					yield("", fmt.Errorf("read text: %w", err))
 					return
 				}
-
-				// We make a copy of the text here to ensure the garbage collector can
-				// free p.buf once we're done reading the pages.
-				if !yield(string(textBytes), nil) {
+				if !yield(sb.String(), nil) {
 					return
 				}
-
-				s.Discard(len(textBytes))
 			}
 		}
 	}
