@@ -68,7 +68,7 @@ func scanSection(s scanner.Scanner) (filemd.Section, error) {
 	defer s.Discard(int(sectionSize))
 
 	var section filemd.Section
-	if proto.Unmarshal(sectionBytes, &section) != nil {
+	if err := proto.Unmarshal(sectionBytes, &section); err != nil {
 		return filemd.Section{}, fmt.Errorf("unmarshal section: %w", err)
 	}
 	return section, nil
@@ -80,7 +80,7 @@ func scanStreamsMetadata(s scanner.Scanner) ([]streamsmd.Stream, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read format version: %w", err)
 	} else if formatVersion != 1 {
-		return nil, fmt.Errorf("unsupported format version: %d", formatVersion)
+		return nil, fmt.Errorf("unsupported streams format version: %d", formatVersion)
 	}
 
 	var streams []streamsmd.Stream
@@ -115,7 +115,7 @@ func scanStream(s scanner.Scanner) (streamsmd.Stream, error) {
 	defer s.Discard(int(streamSize))
 
 	var stream streamsmd.Stream
-	if proto.Unmarshal(streamBytes, &stream) != nil {
+	if err := proto.Unmarshal(streamBytes, &stream); err != nil {
 		return streamsmd.Stream{}, fmt.Errorf("unmarshal stream: %w", err)
 	}
 	return stream, nil
@@ -156,7 +156,7 @@ func scanColumn(s scanner.Scanner) (streamsmd.Column, error) {
 	defer s.Discard(int(columnSize))
 
 	var column streamsmd.Column
-	if proto.Unmarshal(columnBytes, &column) != nil {
+	if err := proto.Unmarshal(columnBytes, &column); err != nil {
 		return streamsmd.Column{}, fmt.Errorf("unmarshal column: %w", err)
 	}
 	return column, nil
@@ -197,7 +197,7 @@ func scanPage(s scanner.Scanner) (streamsmd.Page, error) {
 	defer s.Discard(int(pageSize))
 
 	var page streamsmd.Page
-	if proto.Unmarshal(pageBytes, &page) != nil {
+	if err := proto.Unmarshal(pageBytes, &page); err != nil {
 		return streamsmd.Page{}, fmt.Errorf("unmarshal page: %w", err)
 	}
 	return page, nil

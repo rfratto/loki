@@ -32,8 +32,9 @@ var magic = []byte("THOR")
 // sections that contain their own hierarchy. Only one element of the hierarchy
 // can be open at a given time.
 type Object struct {
-	data  []byte
-	inuse bool // inuse specifies whether an element is currently open.
+	header []byte
+	data   []byte
+	inuse  bool // inuse specifies whether an element is currently open.
 
 	// sections is the accumulating list of sections in the data object. The last
 	// element is partially filled while inuse is true.
@@ -42,7 +43,16 @@ type Object struct {
 
 // New creates a new Object where metadata is limited to the specified size.
 func New() *Object {
-	return &Object{}
+	// Loki never reads the header, but we include it anyway so that:
+	//
+	// 1. Tools can verify the file type by looking at the first 4 bytes rather
+	//    than seeking to the end and reading the last four.
+	//
+	// 2. We can always interpret any data offset of 0 as invalid, since 0 is
+	//    where the magic header is.
+	return &Object{
+		header: magic,
+	}
 }
 
 // OpenStreams opens a streams section in the object. OpenStreams fails if
@@ -63,7 +73,7 @@ func (o *Object) OpenStreams() (*Streams, error) {
 	return &Streams{
 		parent: o,
 
-		offset: len(o.data),
+		offset: len(o.header) + len(o.data),
 	}, nil
 }
 
@@ -108,6 +118,8 @@ func (o *Object) WriteTo(w io.Writer) (int64, error) {
 
 	// The overall structure is:
 	//
+	// header:
+	//   [magic]
 	// body:
 	//   [data]
 	//   [metadata]
@@ -117,7 +129,9 @@ func (o *Object) WriteTo(w io.Writer) (int64, error) {
 	//
 	// The file metadata *must not* use varint since we need the last 8 bytes of
 	// the file to consistently retrieve the tailer.
-	if _, err := cw.Write(o.data); err != nil {
+	if _, err := cw.Write(o.header); err != nil {
+		return cw.total, err
+	} else if _, err := cw.Write(o.data); err != nil {
 		return cw.total, err
 	} else if _, err := cw.Write(md); err != nil {
 		return cw.total, err
@@ -156,7 +170,7 @@ func (o *Object) append(data, metadata []byte) error {
 	}
 
 	// Update the section entry with the offset and size of the metadata.
-	o.sections[len(o.sections)-1].MetadataOffset = uint32(len(o.data) + len(data))
+	o.sections[len(o.sections)-1].MetadataOffset = uint32(len(o.header) + len(o.data) + len(data))
 	o.sections[len(o.sections)-1].MetadataSize = uint32(len(metadata))
 
 	o.data = append(o.data, data...)
