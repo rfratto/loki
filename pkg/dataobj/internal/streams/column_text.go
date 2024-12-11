@@ -14,6 +14,15 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
+const (
+	// We use Zstd for compression text columns to balance between compression
+	// ratio and speed. Zstd slightly outperforms gzip on average, while having
+	// near-comparable read and write performance to snappy.
+	//
+	// https://github.com/facebook/zstd#benchmarks
+	textColumnCompression = streamsmd.COMPRESSION_TYPE_ZSTD
+)
+
 // IterTextPage returns an iterator over a page of values in a text-based
 // column. IterTextPage yields an error if the column does not contain text or
 // the page could not be read.
@@ -44,14 +53,14 @@ func isTextColumn(col *streamsmd.ColumnInfo) bool {
 }
 
 func NewMetadataColumn(name string, maxPageSizeBytes uint64) *Column[string] {
-	// text pages are compressed with GZIP, so we'll want to account for expected
+	// text pages are compressed, so we'll want to account for expected
 	// compression ratio when sizing the pages.
-	targetSize := targetCompressedPageSize(maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
+	targetSize := targetCompressedPageSize(maxPageSizeBytes, textColumnCompression)
 
 	return &Column[string]{
 		name:        name,
 		ty:          streamsmd.COLUMN_TYPE_METADATA,
-		compression: streamsmd.COMPRESSION_GZIP,
+		compression: textColumnCompression,
 
 		pageIter: textPageIter,
 		curPage: &headTextPage{
@@ -64,13 +73,13 @@ func NewMetadataColumn(name string, maxPageSizeBytes uint64) *Column[string] {
 
 // NewLogColumn creates a new column for storing log lines.
 func NewLogColumn(maxPageSizeBytes uint64) *Column[string] {
-	// text pages are compressed with GZIP, so we'll want to account for expected
+	// text pages are compressed, so we'll want to account for expected
 	// compression ratio when sizing the pages.
-	targetSize := targetCompressedPageSize(maxPageSizeBytes, streamsmd.COMPRESSION_GZIP)
+	targetSize := targetCompressedPageSize(maxPageSizeBytes, textColumnCompression)
 
 	return &Column[string]{
 		ty:          streamsmd.COLUMN_TYPE_LOG_LINE,
-		compression: streamsmd.COMPRESSION_GZIP,
+		compression: textColumnCompression,
 
 		pageIter: textPageIter,
 		curPage: &headTextPage{
@@ -171,7 +180,7 @@ func (p *headTextPage) Data() ([]byte, int) {
 
 // Flush returns a page from p, then resets p for new data.
 func (p *headTextPage) Flush() (Page, error) {
-	buf, crc32, err := compressData(p.buf, streamsmd.COMPRESSION_GZIP)
+	buf, crc32, err := compressData(p.buf, textColumnCompression)
 	if err != nil {
 		return Page{}, fmt.Errorf("compressing text page: %w", err)
 	}
@@ -181,7 +190,7 @@ func (p *headTextPage) Flush() (Page, error) {
 		CompressedSize:   len(buf),
 		CRC32:            crc32,
 		RowCount:         p.rows,
-		Compression:      streamsmd.COMPRESSION_GZIP,
+		Compression:      textColumnCompression,
 		Encoding:         streamsmd.ENCODING_PLAIN,
 		Data:             buf,
 	}

@@ -96,13 +96,16 @@ enum ColumnType {
 // compressing a column's data page.
 enum CompressionType {
   // Invalid compression type.
-  COMPRESSION_UNSPECIFIED = 0;
+  COMPRESSION_TYPE_UNSPECIFIED = 0;
 
   // No compression.
-  COMPRESSION_NONE = 1;
+  COMPRESSION_TYPE_NONE = 1;
 
-  // Gzip compression.
-  COMPRESSION_GZIP = 2;
+  // Snappy compression.
+  COMPRESSION_TYPE_SNAPPY = 2;
+
+  // Zstd compression.
+  COMPRESSION_TYPE_ZSTD = 3;
 }
 
 // Statistics about a coulmn or a page. All statistics are optional and are

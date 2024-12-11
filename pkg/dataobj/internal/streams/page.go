@@ -2,12 +2,13 @@ package streams
 
 import (
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"hash/crc32"
 	"io"
 
+	"github.com/golang/snappy"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
+	"github.com/klauspost/compress/zstd"
 )
 
 var (
@@ -37,15 +38,19 @@ func (p *Page) Reader() (io.ReadCloser, error) {
 	}
 
 	switch p.Compression {
-	case streamsmd.COMPRESSION_UNSPECIFIED, streamsmd.COMPRESSION_NONE:
+	case streamsmd.COMPRESSION_TYPE_UNSPECIFIED, streamsmd.COMPRESSION_TYPE_NONE:
 		return io.NopCloser(bytes.NewReader(p.Data)), nil
 
-	case streamsmd.COMPRESSION_GZIP:
-		gr, err := gzip.NewReader(bytes.NewReader(p.Data))
+	case streamsmd.COMPRESSION_TYPE_SNAPPY:
+		sr := snappy.NewReader(bytes.NewReader(p.Data))
+		return io.NopCloser(sr), nil
+
+	case streamsmd.COMPRESSION_TYPE_ZSTD:
+		zr, err := zstd.NewReader(bytes.NewReader(p.Data))
 		if err != nil {
-			return nil, fmt.Errorf("creating gzip reader: %w", err)
+			return nil, fmt.Errorf("creating zstd reader: %w", err)
 		}
-		return gr, nil
+		return newZstdReader(zr), nil
 	}
 
 	panic(fmt.Sprintf("Unexpected compression type %s", p.Compression.String()))
@@ -56,20 +61,41 @@ func (p *Page) Reader() (io.ReadCloser, error) {
 // data.
 func compressData(buf []byte, compression streamsmd.CompressionType) ([]byte, uint32, error) {
 	switch compression {
-	case streamsmd.COMPRESSION_UNSPECIFIED, streamsmd.COMPRESSION_NONE:
+	case streamsmd.COMPRESSION_TYPE_UNSPECIFIED, streamsmd.COMPRESSION_TYPE_NONE:
 		return bytes.Clone(buf), crc32.Checksum(buf, checksumTable), nil
 
-	case streamsmd.COMPRESSION_GZIP:
+	case streamsmd.COMPRESSION_TYPE_SNAPPY:
 		compressedBuf := bytes.NewBuffer(nil)
-		gw := gzip.NewWriter(compressedBuf)
+		sw := snappy.NewBufferedWriter(compressedBuf)
 
-		_, err := io.Copy(gw, bytes.NewReader(buf))
+		_, err := io.Copy(sw, bytes.NewReader(buf))
 		if err != nil {
 			return nil, 0, fmt.Errorf("compressing data: %w", err)
-		} else if err := gw.Close(); err != nil {
-			return nil, 0, fmt.Errorf("closing gzip writer: %w", err)
+		} else if err := sw.Close(); err != nil {
+			return nil, 0, fmt.Errorf("closing zstd writer: %w", err)
+		}
+		return compressedBuf.Bytes(), crc32.Checksum(compressedBuf.Bytes(), checksumTable), nil
+
+	case streamsmd.COMPRESSION_TYPE_ZSTD:
+		// Facebook's benchmarks place the best compression of Zstd as nearly twice
+		// as good as Snappy, while being only very slightly slower.
+		//
+		//   Compression | Ratio | Write    | Read
+		//   ----------- | ----- | -------- | ---------
+		//   Zstd (Best) | 2.887 | 510 MB/s | 1580 MB/s
+		//   Snappy      | 2.073 | 530 MB/s | 1660 MB/s
+		compressedBuf := bytes.NewBuffer(nil)
+		zw, err := zstd.NewWriter(compressedBuf, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
+		if err != nil {
+			return nil, 0, fmt.Errorf("creating zstd writer: %w", err)
 		}
 
+		_, err = io.Copy(zw, bytes.NewReader(buf))
+		if err != nil {
+			return nil, 0, fmt.Errorf("compressing data: %w", err)
+		} else if err := zw.Close(); err != nil {
+			return nil, 0, fmt.Errorf("closing zstd writer: %w", err)
+		}
 		return compressedBuf.Bytes(), crc32.Checksum(compressedBuf.Bytes(), checksumTable), nil
 	}
 
@@ -84,18 +110,25 @@ func compressData(buf []byte, compression streamsmd.CompressionType) ([]byte, ui
 // unmodified.
 func targetCompressedPageSize(uncompressedSize uint64, compression streamsmd.CompressionType) uint64 {
 	const (
-		// averageCompressionRatioGzip is the average compression ratio of Gzip.
+		// averageCompressionRatioSnappy is the average compression ratio of Snappy.
 		//
-		// Gzip typically has a 2:1 to 3:1 compression ratio; we pick the average
-		// between 2:1 (0.5) and 3:1 (0.33).
-		averageCompressionRatioGzip = 0.415
+		// Snappy typically has a 2:1 compression ratio for general purpose data.
+		averageCompressionRatioSnappy = 0.5
+
+		// averageCompressionRatioZstd is the average compression ratio of Zstd.
+		//
+		// As we encode with the best compression level, we expect a higher
+		// compression ratio than the default level, around 2.887:1.
+		averageCompressionRatioZstd = 0.346
 	)
 
 	switch compression {
-	case streamsmd.COMPRESSION_UNSPECIFIED, streamsmd.COMPRESSION_NONE:
+	case streamsmd.COMPRESSION_TYPE_UNSPECIFIED, streamsmd.COMPRESSION_TYPE_NONE:
 		return uncompressedSize
-	case streamsmd.COMPRESSION_GZIP:
-		return uint64(float64(uncompressedSize) / averageCompressionRatioGzip)
+	case streamsmd.COMPRESSION_TYPE_SNAPPY:
+		return uint64(float64(uncompressedSize) / averageCompressionRatioSnappy)
+	case streamsmd.COMPRESSION_TYPE_ZSTD:
+		return uint64(float64(uncompressedSize) / averageCompressionRatioZstd)
 	}
 
 	panic(fmt.Sprintf("Unexpected compression type %s", compression.String()))

@@ -48,7 +48,7 @@ func isTimeColumn(col *streamsmd.ColumnInfo) bool {
 func NewTimestampColumn(maxPageSizeBytes uint64) *Column[time.Time] {
 	return &Column[time.Time]{
 		ty:          streamsmd.COLUMN_TYPE_TIMESTAMP,
-		compression: streamsmd.COMPRESSION_NONE,
+		compression: streamsmd.COMPRESSION_TYPE_NONE,
 
 		pageIter: timePageIter,
 		curPage: &headTimePage{
@@ -149,7 +149,7 @@ func (p *headTimePage) Data() ([]byte, int) {
 func (p *headTimePage) Flush() (Page, error) {
 	// No compression is used for timestamps; it's unlikely that compression can
 	// make delta encoding more efficient.
-	buf, crc32, err := compressData(p.buf, streamsmd.COMPRESSION_NONE)
+	buf, crc32, err := compressData(p.buf, streamsmd.COMPRESSION_TYPE_NONE)
 	if err != nil {
 		return Page{}, fmt.Errorf("compressing text page: %w", err)
 	}
@@ -159,7 +159,7 @@ func (p *headTimePage) Flush() (Page, error) {
 		CompressedSize:   len(buf),
 		CRC32:            crc32,
 		RowCount:         p.rows,
-		Compression:      streamsmd.COMPRESSION_NONE,
+		Compression:      streamsmd.COMPRESSION_TYPE_NONE,
 		Encoding:         streamsmd.ENCODING_DELTA,
 		Data:             buf,
 	}

@@ -37,7 +37,7 @@ func Test(t *testing.T) {
 		CompressedSize:   10,
 		UncompressedSize: 10,
 
-		CompressionType: streamsmd.COMPRESSION_NONE,
+		CompressionType: streamsmd.COMPRESSION_TYPE_NONE,
 
 		Statistics: nil,
 	})
@@ -49,7 +49,7 @@ func Test(t *testing.T) {
 		CRC32:            0,
 		RowCount:         1,
 
-		Compression: streamsmd.COMPRESSION_NONE,
+		Compression: streamsmd.COMPRESSION_TYPE_NONE,
 		Encoding:    streamsmd.ENCODING_PLAIN,
 
 		Data: []byte("hello"),
@@ -59,7 +59,7 @@ func Test(t *testing.T) {
 		CRC32:            0,
 		RowCount:         1,
 
-		Compression: streamsmd.COMPRESSION_NONE,
+		Compression: streamsmd.COMPRESSION_TYPE_NONE,
 		Encoding:    streamsmd.ENCODING_PLAIN,
 
 		Data: []byte("world"),
@@ -104,7 +104,7 @@ func Test(t *testing.T) {
 		require.Equal(t, columns[0].RowsCount, uint32(2))
 		require.Equal(t, columns[0].UncompressedSize, uint32(10))
 		require.Equal(t, columns[0].CompressedSize, uint32(10))
-		require.Equal(t, columns[0].Compression, streamsmd.COMPRESSION_NONE)
+		require.Equal(t, columns[0].Compression, streamsmd.COMPRESSION_TYPE_NONE)
 		require.Nil(t, columns[0].Statistics)
 
 		readPages, err := allPages(streamsDec, columns[0])

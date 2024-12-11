@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/grafana/loki/pkg/push"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,10 @@ func Test(t *testing.T) {
 
 	objects := slices.Collect(reader.Objects(context.Background(), "fake"))
 	require.Len(t, objects, 1)
+
+	attr, err := bucket.Attributes(context.Background(), objects[0])
+	require.NoError(t, err)
+	t.Log("Object size:", humanize.Bytes(uint64(attr.Size)))
 
 	// Try to see if the object has all the data we need.
 	{
