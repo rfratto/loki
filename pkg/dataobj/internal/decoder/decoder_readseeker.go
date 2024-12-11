@@ -23,7 +23,7 @@ func ReadSeekerDecoder(r io.ReadSeeker) Decoder {
 }
 
 // Sections retrieves the set of sections in the object.
-func (dec *readSeekerDecoder) Sections(_ context.Context) ([]filemd.Section, error) {
+func (dec *readSeekerDecoder) Sections(_ context.Context) ([]*filemd.SectionInfo, error) {
 	var metadataSize uint32
 	if _, err := dec.r.Seek(-8, io.SeekEnd); err != nil {
 		return nil, fmt.Errorf("seek to file metadata size: %w", err)
@@ -35,7 +35,12 @@ func (dec *readSeekerDecoder) Sections(_ context.Context) ([]filemd.Section, err
 		return nil, fmt.Errorf("seek to file metadata: %w", err)
 	}
 	r := bufio.NewReader(io.LimitReader(dec.r, int64(metadataSize)))
-	return scanFileMetadata(r)
+
+	md, err := scanFileMetadata(r)
+	if err != nil {
+		return nil, err
+	}
+	return md.Sections, nil
 }
 
 // StreamsDecoder returns a StreamsDecoder.
@@ -48,7 +53,7 @@ type readSeekerStreamsDecoder struct {
 }
 
 // Streams retrieves the set of streams from the provided streams section.
-func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec filemd.Section) ([]streamsmd.Stream, error) {
+func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec *filemd.SectionInfo) ([]streamsmd.Stream, error) {
 	if sec.Type != filemd.SECTION_TYPE_STREAMS {
 		return nil, fmt.Errorf("section is type %s, not streams", sec.Type)
 	}

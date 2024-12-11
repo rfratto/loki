@@ -28,50 +28,32 @@ func scanTailer(s scanner.Scanner) (metadataSize uint32, err error) {
 }
 
 // scanFileMetadata decodes a set of Sections from s.
-func scanFileMetadata(s scanner.Scanner) ([]filemd.Section, error) {
+func scanFileMetadata(s scanner.Scanner) (filemd.Metadata, error) {
 	fileFormatVersion, err := binary.ReadUvarint(s)
 	if err != nil {
-		return nil, fmt.Errorf("read file format version: %w", err)
+		return filemd.Metadata{}, fmt.Errorf("read file format version: %w", err)
 	} else if fileFormatVersion != 1 {
-		return nil, fmt.Errorf("unsupported file format version: %d", fileFormatVersion)
+		return filemd.Metadata{}, fmt.Errorf("unsupported file format version: %d", fileFormatVersion)
 	}
 
-	var sections []filemd.Section
-	sectionCount, err := binary.ReadUvarint(s)
+	metadataSize, err := binary.ReadUvarint(s)
 	if err != nil {
-		return nil, fmt.Errorf("read section count: %w", err)
-	}
-	for range sectionCount {
-		section, err := scanSection(s)
-		if err != nil {
-			return nil, err
-		}
-		sections = append(sections, section)
+		return filemd.Metadata{}, fmt.Errorf("read metadata size: %w", err)
 	}
 
-	return sections, nil
-}
-
-// scanSection decodes an individual section from s.
-func scanSection(s scanner.Scanner) (filemd.Section, error) {
-	sectionSize, err := binary.ReadUvarint(s)
+	metadataBytes, err := s.Peek(int(metadataSize))
 	if err != nil {
-		return filemd.Section{}, fmt.Errorf("read section size: %w", err)
+		return filemd.Metadata{}, fmt.Errorf("read file metadata: %w", err)
+	} else if len(metadataBytes) != int(metadataSize) {
+		return filemd.Metadata{}, fmt.Errorf("read file metadata: short read")
 	}
+	defer s.Discard(int(metadataSize))
 
-	sectionBytes, err := s.Peek(int(sectionSize))
-	if err != nil {
-		return filemd.Section{}, fmt.Errorf("read section: %w", err)
-	} else if len(sectionBytes) != int(sectionSize) {
-		return filemd.Section{}, fmt.Errorf("read section: short read")
+	var metadata filemd.Metadata
+	if err := proto.Unmarshal(metadataBytes, &metadata); err != nil {
+		return filemd.Metadata{}, fmt.Errorf("unmarshal file metadata: %w", err)
 	}
-	defer s.Discard(int(sectionSize))
-
-	var section filemd.Section
-	if err := proto.Unmarshal(sectionBytes, &section); err != nil {
-		return filemd.Section{}, fmt.Errorf("unmarshal section: %w", err)
-	}
-	return section, nil
+	return metadata, nil
 }
 
 // scanStreamsMetadata decodes a set of Streams from s.

@@ -25,7 +25,7 @@ type (
 	// Decoder provides an API for decoding a data object.
 	Decoder interface {
 		// Sections returns the list of sections in a data object.
-		Sections(ctx context.Context) ([]filemd.Section, error)
+		Sections(ctx context.Context) ([]*filemd.SectionInfo, error)
 
 		// StreamDecoder returns a StreamDecoder.
 		StreamsDecoder() StreamsDecoder
@@ -34,7 +34,7 @@ type (
 	// StreamsDecoder supports decoding data from a streams section.
 	StreamsDecoder interface {
 		// Streams returns the set of streams from the StreamsDecoder.
-		Streams(ctx context.Context, sec filemd.Section) ([]streamsmd.Stream, error)
+		Streams(ctx context.Context, sec *filemd.SectionInfo) ([]streamsmd.Stream, error)
 
 		// Columns returns the set of columns within a stream.
 		Columns(ctx context.Context, stream streamsmd.Stream) ([]streamsmd.Column, error)

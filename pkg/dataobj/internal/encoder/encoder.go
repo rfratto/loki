@@ -38,7 +38,7 @@ type Object struct {
 
 	// sections is the accumulating list of sections in the data object. The last
 	// element is partially filled while inuse is true.
-	sections []filemd.Section
+	sections []*filemd.SectionInfo
 }
 
 // New creates a new Object where metadata is limited to the specified size.
@@ -65,9 +65,9 @@ func (o *Object) OpenStreams() (*Streams, error) {
 		return nil, ErrElementExist
 	}
 
-	// The filemd.Section entry starts incomplete; we can't know the offset of
-	// the metadata until all data has been written.
-	o.sections = append(o.sections, filemd.Section{Type: filemd.SECTION_TYPE_STREAMS})
+	// The filemd.SectionInfo entry starts incomplete; we can't know the offset
+	// of the metadata until all data has been written.
+	o.sections = append(o.sections, &filemd.SectionInfo{Type: filemd.SECTION_TYPE_STREAMS})
 
 	o.inuse = true
 	return &Streams{
@@ -90,18 +90,16 @@ func (o *Object) MetadataSize() int {
 func (o *Object) buildMetadata() ([]byte, error) {
 	var buf []byte
 
-	buf = binary.AppendUvarint(buf, uint64(fileFormatVersion))
-	buf = binary.AppendUvarint(buf, uint64(len(o.sections)))
-	for _, section := range o.sections {
-		sectionBytes, err := proto.Marshal(&section)
-		if err != nil {
-			return nil, EncodingError{err}
-		}
-
-		buf = binary.AppendUvarint(buf, uint64(len(sectionBytes)))
-		buf = append(buf, sectionBytes...)
+	md, err := proto.Marshal(&filemd.Metadata{
+		Sections: o.sections,
+	})
+	if err != nil {
+		return nil, EncodingError{err}
 	}
 
+	buf = binary.AppendUvarint(buf, uint64(fileFormatVersion))
+	buf = binary.AppendUvarint(buf, uint64(len(md)))
+	buf = append(buf, md...)
 	return buf, nil
 }
 

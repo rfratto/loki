@@ -10,8 +10,14 @@ package dataobj.metadata.file.v1;
 
 option go_package = "github.com/grafana/loki/pkg/dataobj/internal/filemd";
 
-// Section within a data object.
-message Section {
+// Metadata for the overall data object.
+message Metadata {
+  // Sections within the data object.
+  repeated SectionInfo sections = 1;
+}
+
+// SectionInfo describes a section within the data object.
+message SectionInfo {
   // Type of the section within the data object.
   SectionType type = 1;
 
@@ -29,5 +35,3 @@ enum SectionType {
   // SECTION_TYPE_STREAMS is a section containing log stream data.
   SECTION_TYPE_STREAMS = 1;
 }
-
-

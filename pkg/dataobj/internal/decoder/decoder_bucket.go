@@ -28,7 +28,7 @@ func BucketDecoder(bucket objstore.BucketReader, path string) Decoder {
 	}
 }
 
-func (bd *bucketDecoder) Sections(ctx context.Context) (res []filemd.Section, err error) {
+func (bd *bucketDecoder) Sections(ctx context.Context) (res []*filemd.SectionInfo, err error) {
 	tailer, err := bd.tailer(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("reading tailer: %w", err)
@@ -39,7 +39,12 @@ func (bd *bucketDecoder) Sections(ctx context.Context) (res []filemd.Section, er
 		return nil, fmt.Errorf("getting file metadata: %w", err)
 	}
 	defer rc.Close()
-	return scanFileMetadata(bufio.NewReader(rc))
+
+	md, err := scanFileMetadata(bufio.NewReader(rc))
+	if err != nil {
+		return nil, err
+	}
+	return md.Sections, nil
 }
 
 type tailer struct {
@@ -83,7 +88,7 @@ type bucketStreamsDecoder struct {
 	path   string
 }
 
-func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec filemd.Section) ([]streamsmd.Stream, error) {
+func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec *filemd.SectionInfo) ([]streamsmd.Stream, error) {
 	if sec.Type != filemd.SECTION_TYPE_STREAMS {
 		return nil, fmt.Errorf("unsupported section type: %s", sec.Type)
 	}
