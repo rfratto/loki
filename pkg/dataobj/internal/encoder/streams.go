@@ -319,6 +319,9 @@ func (c *Column) AppendPage(page streams.Page) error {
 		return ErrClosed
 	}
 
+	// It's possible that the caller can provide an incorrect value for
+	// UncompressedSize and CompressedSize, but this doesn't effect
+	// decoding/encoding so we don't check it.
 	c.pages = append(c.pages, &streamsmd.PageInfo{
 		UncompressedSize: uint32(page.UncompressedSize),
 		CompressedSize:   uint32(page.CompressedSize),
