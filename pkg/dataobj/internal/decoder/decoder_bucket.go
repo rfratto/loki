@@ -88,7 +88,7 @@ type bucketStreamsDecoder struct {
 	path   string
 }
 
-func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec *filemd.SectionInfo) ([]streamsmd.Stream, error) {
+func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec *filemd.SectionInfo) ([]*streamsmd.StreamInfo, error) {
 	if sec.Type != filemd.SECTION_TYPE_STREAMS {
 		return nil, fmt.Errorf("unsupported section type: %s", sec.Type)
 	}
@@ -98,29 +98,44 @@ func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec *filemd.Section
 		return nil, fmt.Errorf("reading streams section metadata: %w", err)
 	}
 	defer rc.Close()
-	return scanStreamsMetadata(bufio.NewReader(rc))
+
+	md, err := scanStreamsMetadata(bufio.NewReader(rc))
+	if err != nil {
+		return nil, err
+	}
+	return md.Streams, nil
 }
 
-func (bd *bucketStreamsDecoder) Columns(ctx context.Context, stream streamsmd.Stream) ([]streamsmd.Column, error) {
+func (bd *bucketStreamsDecoder) Columns(ctx context.Context, stream *streamsmd.StreamInfo) ([]*streamsmd.ColumnInfo, error) {
 	rc, err := bd.bucket.GetRange(ctx, bd.path, int64(stream.MetadataOffset), int64(stream.MetadataSize))
 	if err != nil {
 		return nil, fmt.Errorf("reading stream metadata: %w", err)
 	}
 	defer rc.Close()
-	return scanStreamMetadata(bufio.NewReader(rc))
+
+	md, err := scanStreamMetadata(bufio.NewReader(rc))
+	if err != nil {
+		return nil, err
+	}
+	return md.Columns, nil
 }
 
-func (bd *bucketStreamsDecoder) Pages(ctx context.Context, col streamsmd.Column) ([]streamsmd.Page, error) {
+func (bd *bucketStreamsDecoder) Pages(ctx context.Context, col *streamsmd.ColumnInfo) ([]*streamsmd.PageInfo, error) {
 	rc, err := bd.bucket.GetRange(ctx, bd.path, int64(col.MetadataOffset), int64(col.MetadataSize))
 	if err != nil {
 		return nil, fmt.Errorf("reading column metadata: %w", err)
 	}
 	defer rc.Close()
-	return scanColumnMetadata(bufio.NewReader(rc))
+
+	md, err := scanColumnMetadata(bufio.NewReader(rc))
+	if err != nil {
+		return nil, err
+	}
+	return md.Pages, nil
 }
 
-func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []streamsmd.Page) iter.Seq2[streams.Page, error] {
-	readPage := func(ctx context.Context, path string, page streamsmd.Page) (streams.Page, error) {
+func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*streamsmd.PageInfo) iter.Seq2[streams.Page, error] {
+	readPage := func(ctx context.Context, path string, page *streamsmd.PageInfo) (streams.Page, error) {
 		rc, err := bd.bucket.GetRange(ctx, path, int64(page.DataOffset), int64(page.DataSize))
 		if err != nil {
 			return streams.Page{}, err

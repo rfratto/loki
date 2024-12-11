@@ -16,7 +16,7 @@ import (
 // IterTimePage returns an iterator over a page of values in a timestamp-based
 // column. IterTextPage yields an error if the column does not contain time or
 // the page could not be read.
-func IterTimePage(col streamsmd.Column, page Page) iter.Seq2[time.Time, error] {
+func IterTimePage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		var zero time.Time
 
@@ -40,7 +40,7 @@ func IterTimePage(col streamsmd.Column, page Page) iter.Seq2[time.Time, error] {
 	}
 }
 
-func isTimeColumn(col streamsmd.Column) bool {
+func isTimeColumn(col *streamsmd.ColumnInfo) bool {
 	return col.Type == streamsmd.COLUMN_TYPE_TIMESTAMP
 }
 

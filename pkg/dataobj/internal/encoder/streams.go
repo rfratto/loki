@@ -22,7 +22,7 @@ type Streams struct {
 	inuse  bool // inuse specifies whether a Stream is currently open.
 
 	data    []byte
-	streams []streamsmd.Stream
+	streams []*streamsmd.StreamInfo
 }
 
 // OpenStream opens a new Stream. OpenStream fails if there is currently
@@ -43,7 +43,7 @@ func (s *Streams) OpenStream(id streamsmd.StreamIdentifier) (*Stream, error) {
 	// to the encoder.
 	//
 	// We allow the caller to pass information about its size upwards.
-	s.streams = append(s.streams, streamsmd.Stream{Identifier: &id})
+	s.streams = append(s.streams, &streamsmd.StreamInfo{Identifier: &id})
 
 	s.inuse = true
 	return &Stream{
@@ -71,18 +71,14 @@ func (s *Streams) MetadataSize() int {
 func (s *Streams) buildMetadata() ([]byte, error) {
 	var buf []byte
 
-	buf = binary.AppendUvarint(buf, uint64(streamsFormatVersion))
-	buf = binary.AppendUvarint(buf, uint64(len(s.streams)))
-	for _, stream := range s.streams {
-		streamBytes, err := proto.Marshal(&stream)
-		if err != nil {
-			return nil, EncodingError{err}
-		}
-
-		buf = binary.AppendUvarint(buf, uint64(len(streamBytes)))
-		buf = append(buf, streamBytes...)
+	md, err := proto.Marshal(&streamsmd.Metadata{Streams: s.streams})
+	if err != nil {
+		return nil, EncodingError{err}
 	}
 
+	buf = binary.AppendUvarint(buf, uint64(streamsFormatVersion))
+	buf = binary.AppendUvarint(buf, uint64(len(md)))
+	buf = append(buf, md...)
 	return buf, nil
 }
 
@@ -158,7 +154,7 @@ type Stream struct {
 	inuse  bool // inuse specifies whether a Column is currently open.
 
 	data    []byte
-	columns []streamsmd.Column
+	columns []*streamsmd.ColumnInfo
 }
 
 // OpenColumn opens a new column in the stream. OpenColumn fails if there is
@@ -175,7 +171,7 @@ func (s *Stream) OpenColumn(column streams.ColumnInfo) (*Column, error) {
 
 	columnOffset := s.offset + len(s.data)
 
-	s.columns = append(s.columns, streamsmd.Column{
+	s.columns = append(s.columns, &streamsmd.ColumnInfo{
 		Name:             column.Name,
 		Type:             column.Type,
 		RowsCount:        uint32(column.RowsCount),
@@ -210,17 +206,13 @@ func (s *Stream) MetadataSize() int {
 func (s *Stream) buildMetadata() ([]byte, error) {
 	var buf []byte
 
-	buf = binary.AppendUvarint(buf, uint64(len(s.columns)))
-	for _, col := range s.columns {
-		columnBytes, err := proto.Marshal(&col)
-		if err != nil {
-			return nil, EncodingError{err}
-		}
-
-		buf = binary.AppendUvarint(buf, uint64(len(columnBytes)))
-		buf = append(buf, columnBytes...)
+	md, err := proto.Marshal(&streamsmd.StreamMetadata{Columns: s.columns})
+	if err != nil {
+		return nil, EncodingError{err}
 	}
 
+	buf = binary.AppendUvarint(buf, uint64(len(md)))
+	buf = append(buf, md...)
 	return buf, nil
 }
 
@@ -314,7 +306,7 @@ type Column struct {
 	closed bool // closed specifies whether the Column has been closed.
 
 	data  []byte
-	pages []streamsmd.Page
+	pages []*streamsmd.PageInfo
 }
 
 // AppendPage appends a new page to the column. AppendPage fails if the column
@@ -327,7 +319,7 @@ func (c *Column) AppendPage(page streams.Page) error {
 		return ErrClosed
 	}
 
-	c.pages = append(c.pages, streamsmd.Page{
+	c.pages = append(c.pages, &streamsmd.PageInfo{
 		UncompressedSize: uint32(page.UncompressedSize),
 		CompressedSize:   uint32(page.CompressedSize),
 		Crc32:            page.CRC32,
@@ -360,17 +352,13 @@ func (c *Column) MetadataSize() int {
 func (c *Column) buildMetadata() ([]byte, error) {
 	var buf []byte
 
-	buf = binary.AppendUvarint(buf, uint64(len(c.pages)))
-	for _, page := range c.pages {
-		pageBytes, err := proto.Marshal(&page)
-		if err != nil {
-			return nil, EncodingError{err}
-		}
-
-		buf = binary.AppendUvarint(buf, uint64(len(pageBytes)))
-		buf = append(buf, pageBytes...)
+	md, err := proto.Marshal(&streamsmd.ColumnMetadata{Pages: c.pages})
+	if err != nil {
+		return nil, EncodingError{err}
 	}
 
+	buf = binary.AppendUvarint(buf, uint64(len(md)))
+	buf = append(buf, md...)
 	return buf, nil
 }
 

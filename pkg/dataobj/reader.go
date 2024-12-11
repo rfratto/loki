@@ -54,7 +54,7 @@ func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.La
 	return func(yield func(labels.Labels, error) bool) {
 		for stream, err := range r.streams(ctx, object) {
 			if err != nil {
-				yield(nil, fmt.Errorf("reading streams: %w", err))
+				yield(nil, fmt.Errorf("iterating streams: %w", err))
 				return
 			}
 
@@ -66,13 +66,13 @@ func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.La
 	}
 }
 
-func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[streamsmd.Stream, error] {
+func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[*streamsmd.StreamInfo, error] {
 	dec := decoder.BucketDecoder(r.bucket, object)
 
-	return func(yield func(streamsmd.Stream, error) bool) {
+	return func(yield func(*streamsmd.StreamInfo, error) bool) {
 		sections, err := dec.Sections(ctx)
 		if err != nil {
-			yield(streamsmd.Stream{}, fmt.Errorf("reading sections: %w", err))
+			yield(nil, fmt.Errorf("reading sections: %w", err))
 			return
 		}
 
@@ -84,7 +84,7 @@ func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[streamsmd
 			streamsDec := dec.StreamsDecoder()
 			streams, err := streamsDec.Streams(ctx, sec)
 			if err != nil {
-				yield(streamsmd.Stream{}, fmt.Errorf("reading streams: %w", err))
+				yield(nil, fmt.Errorf("reading streams: %w", err))
 				return
 			}
 

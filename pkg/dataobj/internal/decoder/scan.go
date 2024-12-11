@@ -57,7 +57,7 @@ func scanFileMetadata(s scanner.Scanner) (filemd.Metadata, error) {
 }
 
 // scanStreamsMetadata decodes a set of Streams from s.
-func scanStreamsMetadata(s scanner.Scanner) ([]streamsmd.Stream, error) {
+func scanStreamsMetadata(s scanner.Scanner) (*streamsmd.Metadata, error) {
 	formatVersion, err := binary.ReadUvarint(s)
 	if err != nil {
 		return nil, fmt.Errorf("read format version: %w", err)
@@ -65,122 +65,66 @@ func scanStreamsMetadata(s scanner.Scanner) ([]streamsmd.Stream, error) {
 		return nil, fmt.Errorf("unsupported streams format version: %d", formatVersion)
 	}
 
-	var streams []streamsmd.Stream
-	streamCount, err := binary.ReadUvarint(s)
+	metadataSize, err := binary.ReadUvarint(s)
 	if err != nil {
-		return nil, fmt.Errorf("read stream count: %w", err)
-	}
-	for range streamCount {
-		stream, err := scanStream(s)
-		if err != nil {
-			return nil, err
-		}
-		streams = append(streams, stream)
+		return nil, fmt.Errorf("read metadata size: %w", err)
 	}
 
-	return streams, nil
-}
-
-// scanStream decodes an individual stream from s.
-func scanStream(s scanner.Scanner) (streamsmd.Stream, error) {
-	streamSize, err := binary.ReadUvarint(s)
+	metadataBytes, err := s.Peek(int(metadataSize))
 	if err != nil {
-		return streamsmd.Stream{}, fmt.Errorf("read stream size: %w", err)
+		return nil, fmt.Errorf("read metadata: %w", err)
+	} else if len(metadataBytes) != int(metadataSize) {
+		return nil, fmt.Errorf("read metadata: short read")
 	}
+	defer s.Discard(int(metadataSize))
 
-	streamBytes, err := s.Peek(int(streamSize))
-	if err != nil {
-		return streamsmd.Stream{}, fmt.Errorf("read stream: %w", err)
-	} else if len(streamBytes) != int(streamSize) {
-		return streamsmd.Stream{}, fmt.Errorf("read stream: short read")
+	var metadata streamsmd.Metadata
+	if err := proto.Unmarshal(metadataBytes, &metadata); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
-	defer s.Discard(int(streamSize))
-
-	var stream streamsmd.Stream
-	if err := proto.Unmarshal(streamBytes, &stream); err != nil {
-		return streamsmd.Stream{}, fmt.Errorf("unmarshal stream: %w", err)
-	}
-	return stream, nil
+	return &metadata, nil
 }
 
 // scanStreamMetadata decodes a set of Columns from s.
-func scanStreamMetadata(s scanner.Scanner) ([]streamsmd.Column, error) {
-	columnCount, err := binary.ReadUvarint(s)
+func scanStreamMetadata(s scanner.Scanner) (*streamsmd.StreamMetadata, error) {
+	metadataSize, err := binary.ReadUvarint(s)
 	if err != nil {
-		return nil, fmt.Errorf("read column count: %w", err)
+		return nil, fmt.Errorf("read metadata size: %w", err)
 	}
 
-	var columns []streamsmd.Column
-	for range columnCount {
-		column, err := scanColumn(s)
-		if err != nil {
-			return nil, err
-		}
-		columns = append(columns, column)
-	}
-
-	return columns, nil
-}
-
-// scanColumn decodes an individual column from s.
-func scanColumn(s scanner.Scanner) (streamsmd.Column, error) {
-	columnSize, err := binary.ReadUvarint(s)
+	metadataBytes, err := s.Peek(int(metadataSize))
 	if err != nil {
-		return streamsmd.Column{}, fmt.Errorf("read column size: %w", err)
+		return nil, fmt.Errorf("read metadata: %w", err)
+	} else if len(metadataBytes) != int(metadataSize) {
+		return nil, fmt.Errorf("read metadata: short read")
 	}
+	defer s.Discard(int(metadataSize))
 
-	columnBytes, err := s.Peek(int(columnSize))
-	if err != nil {
-		return streamsmd.Column{}, fmt.Errorf("read column: %w", err)
-	} else if len(columnBytes) != int(columnSize) {
-		return streamsmd.Column{}, fmt.Errorf("read column: short read")
+	var metadata streamsmd.StreamMetadata
+	if err := proto.Unmarshal(metadataBytes, &metadata); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
-	defer s.Discard(int(columnSize))
-
-	var column streamsmd.Column
-	if err := proto.Unmarshal(columnBytes, &column); err != nil {
-		return streamsmd.Column{}, fmt.Errorf("unmarshal column: %w", err)
-	}
-	return column, nil
+	return &metadata, nil
 }
 
 // scanColumnMetadata decodes a set of Pages from s.
-func scanColumnMetadata(s scanner.Scanner) ([]streamsmd.Page, error) {
-	pageCount, err := binary.ReadUvarint(s)
+func scanColumnMetadata(s scanner.Scanner) (*streamsmd.ColumnMetadata, error) {
+	metadataSize, err := binary.ReadUvarint(s)
 	if err != nil {
-		return nil, fmt.Errorf("read page count: %w", err)
+		return nil, fmt.Errorf("read metadata size: %w", err)
 	}
 
-	var pages []streamsmd.Page
-	for range pageCount {
-		page, err := scanPage(s)
-		if err != nil {
-			return nil, err
-		}
-		pages = append(pages, page)
-	}
-
-	return pages, nil
-}
-
-// scanPage decodes an individual page from s.
-func scanPage(s scanner.Scanner) (streamsmd.Page, error) {
-	pageSize, err := binary.ReadUvarint(s)
+	metadataBytes, err := s.Peek(int(metadataSize))
 	if err != nil {
-		return streamsmd.Page{}, fmt.Errorf("read page size: %w", err)
+		return nil, fmt.Errorf("read metadata: %w", err)
+	} else if len(metadataBytes) != int(metadataSize) {
+		return nil, fmt.Errorf("read metadata: short read")
 	}
+	defer s.Discard(int(metadataSize))
 
-	pageBytes, err := s.Peek(int(pageSize))
-	if err != nil {
-		return streamsmd.Page{}, fmt.Errorf("read page: %w", err)
-	} else if len(pageBytes) != int(pageSize) {
-		return streamsmd.Page{}, fmt.Errorf("read page: short read")
+	var metadata streamsmd.ColumnMetadata
+	if err := proto.Unmarshal(metadataBytes, &metadata); err != nil {
+		return nil, fmt.Errorf("unmarshal metadata: %w", err)
 	}
-	defer s.Discard(int(pageSize))
-
-	var page streamsmd.Page
-	if err := proto.Unmarshal(pageBytes, &page); err != nil {
-		return streamsmd.Page{}, fmt.Errorf("unmarshal page: %w", err)
-	}
-	return page, nil
+	return &metadata, nil
 }

@@ -116,8 +116,53 @@ func (EncodingType) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_19864a2be3f704b5, []int{2}
 }
 
-// Stream describes an individual log stream within the streams section.
-type Stream struct {
+// Metadata describes the metadata for the streams section.
+type Metadata struct {
+	// Streams within the section.
+	Streams []*StreamInfo `protobuf:"bytes,1,rep,name=streams,proto3" json:"streams,omitempty"`
+}
+
+func (m *Metadata) Reset()      { *m = Metadata{} }
+func (*Metadata) ProtoMessage() {}
+func (*Metadata) Descriptor() ([]byte, []int) {
+	return fileDescriptor_19864a2be3f704b5, []int{0}
+}
+func (m *Metadata) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Metadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Metadata.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Metadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Metadata.Merge(m, src)
+}
+func (m *Metadata) XXX_Size() int {
+	return m.Size()
+}
+func (m *Metadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_Metadata.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Metadata proto.InternalMessageInfo
+
+func (m *Metadata) GetStreams() []*StreamInfo {
+	if m != nil {
+		return m.Streams
+	}
+	return nil
+}
+
+// StreamInfo describes an individual log stream within the streams section.
+type StreamInfo struct {
 	// Label set representing the stream.
 	Identifier *StreamIdentifier `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
 	// Total uncompressed size of the entire stream.
@@ -131,17 +176,17 @@ type Stream struct {
 	MetadataSize uint32 `protobuf:"varint,5,opt,name=metadata_size,json=metadataSize,proto3" json:"metadata_size,omitempty"`
 }
 
-func (m *Stream) Reset()      { *m = Stream{} }
-func (*Stream) ProtoMessage() {}
-func (*Stream) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19864a2be3f704b5, []int{0}
+func (m *StreamInfo) Reset()      { *m = StreamInfo{} }
+func (*StreamInfo) ProtoMessage() {}
+func (*StreamInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_19864a2be3f704b5, []int{1}
 }
-func (m *Stream) XXX_Unmarshal(b []byte) error {
+func (m *StreamInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Stream) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *StreamInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_Stream.Marshal(b, m, deterministic)
+		return xxx_messageInfo_StreamInfo.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -151,47 +196,47 @@ func (m *Stream) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *Stream) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Stream.Merge(m, src)
+func (m *StreamInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamInfo.Merge(m, src)
 }
-func (m *Stream) XXX_Size() int {
+func (m *StreamInfo) XXX_Size() int {
 	return m.Size()
 }
-func (m *Stream) XXX_DiscardUnknown() {
-	xxx_messageInfo_Stream.DiscardUnknown(m)
+func (m *StreamInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_StreamInfo.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Stream proto.InternalMessageInfo
+var xxx_messageInfo_StreamInfo proto.InternalMessageInfo
 
-func (m *Stream) GetIdentifier() *StreamIdentifier {
+func (m *StreamInfo) GetIdentifier() *StreamIdentifier {
 	if m != nil {
 		return m.Identifier
 	}
 	return nil
 }
 
-func (m *Stream) GetUncompressedSize() uint32 {
+func (m *StreamInfo) GetUncompressedSize() uint32 {
 	if m != nil {
 		return m.UncompressedSize
 	}
 	return 0
 }
 
-func (m *Stream) GetCompressedSize() uint32 {
+func (m *StreamInfo) GetCompressedSize() uint32 {
 	if m != nil {
 		return m.CompressedSize
 	}
 	return 0
 }
 
-func (m *Stream) GetMetadataOffset() uint32 {
+func (m *StreamInfo) GetMetadataOffset() uint32 {
 	if m != nil {
 		return m.MetadataOffset
 	}
 	return 0
 }
 
-func (m *Stream) GetMetadataSize() uint32 {
+func (m *StreamInfo) GetMetadataSize() uint32 {
 	if m != nil {
 		return m.MetadataSize
 	}
@@ -207,7 +252,7 @@ type StreamIdentifier struct {
 func (m *StreamIdentifier) Reset()      { *m = StreamIdentifier{} }
 func (*StreamIdentifier) ProtoMessage() {}
 func (*StreamIdentifier) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19864a2be3f704b5, []int{1}
+	return fileDescriptor_19864a2be3f704b5, []int{2}
 }
 func (m *StreamIdentifier) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -251,7 +296,7 @@ type StreamIdentifier_Label struct {
 func (m *StreamIdentifier_Label) Reset()      { *m = StreamIdentifier_Label{} }
 func (*StreamIdentifier_Label) ProtoMessage() {}
 func (*StreamIdentifier_Label) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19864a2be3f704b5, []int{1, 0}
+	return fileDescriptor_19864a2be3f704b5, []int{2, 0}
 }
 func (m *StreamIdentifier_Label) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -294,8 +339,53 @@ func (m *StreamIdentifier_Label) GetValue() string {
 	return ""
 }
 
-// Column describes an individual column within a stream.
-type Column struct {
+// StreamMetadata describes the metadata for a stream.
+type StreamMetadata struct {
+	// Columns within the stream.
+	Columns []*ColumnInfo `protobuf:"bytes,1,rep,name=columns,proto3" json:"columns,omitempty"`
+}
+
+func (m *StreamMetadata) Reset()      { *m = StreamMetadata{} }
+func (*StreamMetadata) ProtoMessage() {}
+func (*StreamMetadata) Descriptor() ([]byte, []int) {
+	return fileDescriptor_19864a2be3f704b5, []int{3}
+}
+func (m *StreamMetadata) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *StreamMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_StreamMetadata.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *StreamMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StreamMetadata.Merge(m, src)
+}
+func (m *StreamMetadata) XXX_Size() int {
+	return m.Size()
+}
+func (m *StreamMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_StreamMetadata.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_StreamMetadata proto.InternalMessageInfo
+
+func (m *StreamMetadata) GetColumns() []*ColumnInfo {
+	if m != nil {
+		return m.Columns
+	}
+	return nil
+}
+
+// ColumnInfo describes an individual column within a stream.
+type ColumnInfo struct {
 	// Name of the column; set only for COLUMN_TYPE_METADATA.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Column type.
@@ -317,17 +407,17 @@ type Column struct {
 	Statistics *Statistics `protobuf:"bytes,9,opt,name=statistics,proto3" json:"statistics,omitempty"`
 }
 
-func (m *Column) Reset()      { *m = Column{} }
-func (*Column) ProtoMessage() {}
-func (*Column) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19864a2be3f704b5, []int{2}
+func (m *ColumnInfo) Reset()      { *m = ColumnInfo{} }
+func (*ColumnInfo) ProtoMessage() {}
+func (*ColumnInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_19864a2be3f704b5, []int{4}
 }
-func (m *Column) XXX_Unmarshal(b []byte) error {
+func (m *ColumnInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Column) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ColumnInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_Column.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ColumnInfo.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -337,75 +427,75 @@ func (m *Column) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *Column) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Column.Merge(m, src)
+func (m *ColumnInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ColumnInfo.Merge(m, src)
 }
-func (m *Column) XXX_Size() int {
+func (m *ColumnInfo) XXX_Size() int {
 	return m.Size()
 }
-func (m *Column) XXX_DiscardUnknown() {
-	xxx_messageInfo_Column.DiscardUnknown(m)
+func (m *ColumnInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_ColumnInfo.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Column proto.InternalMessageInfo
+var xxx_messageInfo_ColumnInfo proto.InternalMessageInfo
 
-func (m *Column) GetName() string {
+func (m *ColumnInfo) GetName() string {
 	if m != nil {
 		return m.Name
 	}
 	return ""
 }
 
-func (m *Column) GetType() ColumnType {
+func (m *ColumnInfo) GetType() ColumnType {
 	if m != nil {
 		return m.Type
 	}
 	return COLUMN_TYPE_UNSPECIFIED
 }
 
-func (m *Column) GetRowsCount() uint32 {
+func (m *ColumnInfo) GetRowsCount() uint32 {
 	if m != nil {
 		return m.RowsCount
 	}
 	return 0
 }
 
-func (m *Column) GetCompression() CompressionType {
+func (m *ColumnInfo) GetCompression() CompressionType {
 	if m != nil {
 		return m.Compression
 	}
 	return COMPRESSION_UNSPECIFIED
 }
 
-func (m *Column) GetUncompressedSize() uint32 {
+func (m *ColumnInfo) GetUncompressedSize() uint32 {
 	if m != nil {
 		return m.UncompressedSize
 	}
 	return 0
 }
 
-func (m *Column) GetCompressedSize() uint32 {
+func (m *ColumnInfo) GetCompressedSize() uint32 {
 	if m != nil {
 		return m.CompressedSize
 	}
 	return 0
 }
 
-func (m *Column) GetMetadataOffset() uint32 {
+func (m *ColumnInfo) GetMetadataOffset() uint32 {
 	if m != nil {
 		return m.MetadataOffset
 	}
 	return 0
 }
 
-func (m *Column) GetMetadataSize() uint32 {
+func (m *ColumnInfo) GetMetadataSize() uint32 {
 	if m != nil {
 		return m.MetadataSize
 	}
 	return 0
 }
 
-func (m *Column) GetStatistics() *Statistics {
+func (m *ColumnInfo) GetStatistics() *Statistics {
 	if m != nil {
 		return m.Statistics
 	}
@@ -426,7 +516,7 @@ type Statistics struct {
 func (m *Statistics) Reset()      { *m = Statistics{} }
 func (*Statistics) ProtoMessage() {}
 func (*Statistics) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19864a2be3f704b5, []int{3}
+	return fileDescriptor_19864a2be3f704b5, []int{5}
 }
 func (m *Statistics) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -476,8 +566,53 @@ func (m *Statistics) GetCountDistinctSketch() uint32 {
 	return 0
 }
 
+// ColumnMetadata describes the metadata for a column.
+type ColumnMetadata struct {
+	// Pages within the column.
+	Pages []*PageInfo `protobuf:"bytes,1,rep,name=pages,proto3" json:"pages,omitempty"`
+}
+
+func (m *ColumnMetadata) Reset()      { *m = ColumnMetadata{} }
+func (*ColumnMetadata) ProtoMessage() {}
+func (*ColumnMetadata) Descriptor() ([]byte, []int) {
+	return fileDescriptor_19864a2be3f704b5, []int{6}
+}
+func (m *ColumnMetadata) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ColumnMetadata) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ColumnMetadata.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ColumnMetadata) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ColumnMetadata.Merge(m, src)
+}
+func (m *ColumnMetadata) XXX_Size() int {
+	return m.Size()
+}
+func (m *ColumnMetadata) XXX_DiscardUnknown() {
+	xxx_messageInfo_ColumnMetadata.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ColumnMetadata proto.InternalMessageInfo
+
+func (m *ColumnMetadata) GetPages() []*PageInfo {
+	if m != nil {
+		return m.Pages
+	}
+	return nil
+}
+
 // Page describes an individual page within a column.
-type Page struct {
+type PageInfo struct {
 	// Uncompressed size of the page within the data object.
 	UncompressedSize uint32 `protobuf:"varint,1,opt,name=uncompressed_size,json=uncompressedSize,proto3" json:"uncompressed_size,omitempty"`
 	// Compressed size of the page within the data object. Compression size
@@ -499,17 +634,17 @@ type Page struct {
 	Statistics *Statistics `protobuf:"bytes,9,opt,name=statistics,proto3" json:"statistics,omitempty"`
 }
 
-func (m *Page) Reset()      { *m = Page{} }
-func (*Page) ProtoMessage() {}
-func (*Page) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19864a2be3f704b5, []int{4}
+func (m *PageInfo) Reset()      { *m = PageInfo{} }
+func (*PageInfo) ProtoMessage() {}
+func (*PageInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_19864a2be3f704b5, []int{7}
 }
-func (m *Page) XXX_Unmarshal(b []byte) error {
+func (m *PageInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *Page) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *PageInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_Page.Marshal(b, m, deterministic)
+		return xxx_messageInfo_PageInfo.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -519,75 +654,75 @@ func (m *Page) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *Page) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Page.Merge(m, src)
+func (m *PageInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PageInfo.Merge(m, src)
 }
-func (m *Page) XXX_Size() int {
+func (m *PageInfo) XXX_Size() int {
 	return m.Size()
 }
-func (m *Page) XXX_DiscardUnknown() {
-	xxx_messageInfo_Page.DiscardUnknown(m)
+func (m *PageInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_PageInfo.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_Page proto.InternalMessageInfo
+var xxx_messageInfo_PageInfo proto.InternalMessageInfo
 
-func (m *Page) GetUncompressedSize() uint32 {
+func (m *PageInfo) GetUncompressedSize() uint32 {
 	if m != nil {
 		return m.UncompressedSize
 	}
 	return 0
 }
 
-func (m *Page) GetCompressedSize() uint32 {
+func (m *PageInfo) GetCompressedSize() uint32 {
 	if m != nil {
 		return m.CompressedSize
 	}
 	return 0
 }
 
-func (m *Page) GetCrc32() uint32 {
+func (m *PageInfo) GetCrc32() uint32 {
 	if m != nil {
 		return m.Crc32
 	}
 	return 0
 }
 
-func (m *Page) GetRowsCount() uint32 {
+func (m *PageInfo) GetRowsCount() uint32 {
 	if m != nil {
 		return m.RowsCount
 	}
 	return 0
 }
 
-func (m *Page) GetCompression() CompressionType {
+func (m *PageInfo) GetCompression() CompressionType {
 	if m != nil {
 		return m.Compression
 	}
 	return COMPRESSION_UNSPECIFIED
 }
 
-func (m *Page) GetEncoding() EncodingType {
+func (m *PageInfo) GetEncoding() EncodingType {
 	if m != nil {
 		return m.Encoding
 	}
 	return ENCODING_UNSPECIFIED
 }
 
-func (m *Page) GetDataOffset() uint32 {
+func (m *PageInfo) GetDataOffset() uint32 {
 	if m != nil {
 		return m.DataOffset
 	}
 	return 0
 }
 
-func (m *Page) GetDataSize() uint32 {
+func (m *PageInfo) GetDataSize() uint32 {
 	if m != nil {
 		return m.DataSize
 	}
 	return 0
 }
 
-func (m *Page) GetStatistics() *Statistics {
+func (m *PageInfo) GetStatistics() *Statistics {
 	if m != nil {
 		return m.Statistics
 	}
@@ -598,12 +733,15 @@ func init() {
 	proto.RegisterEnum("dataobj.metadata.streams.v1.ColumnType", ColumnType_name, ColumnType_value)
 	proto.RegisterEnum("dataobj.metadata.streams.v1.CompressionType", CompressionType_name, CompressionType_value)
 	proto.RegisterEnum("dataobj.metadata.streams.v1.EncodingType", EncodingType_name, EncodingType_value)
-	proto.RegisterType((*Stream)(nil), "dataobj.metadata.streams.v1.Stream")
+	proto.RegisterType((*Metadata)(nil), "dataobj.metadata.streams.v1.Metadata")
+	proto.RegisterType((*StreamInfo)(nil), "dataobj.metadata.streams.v1.StreamInfo")
 	proto.RegisterType((*StreamIdentifier)(nil), "dataobj.metadata.streams.v1.StreamIdentifier")
 	proto.RegisterType((*StreamIdentifier_Label)(nil), "dataobj.metadata.streams.v1.StreamIdentifier.Label")
-	proto.RegisterType((*Column)(nil), "dataobj.metadata.streams.v1.Column")
+	proto.RegisterType((*StreamMetadata)(nil), "dataobj.metadata.streams.v1.StreamMetadata")
+	proto.RegisterType((*ColumnInfo)(nil), "dataobj.metadata.streams.v1.ColumnInfo")
 	proto.RegisterType((*Statistics)(nil), "dataobj.metadata.streams.v1.Statistics")
-	proto.RegisterType((*Page)(nil), "dataobj.metadata.streams.v1.Page")
+	proto.RegisterType((*ColumnMetadata)(nil), "dataobj.metadata.streams.v1.ColumnMetadata")
+	proto.RegisterType((*PageInfo)(nil), "dataobj.metadata.streams.v1.PageInfo")
 }
 
 func init() {
@@ -611,55 +749,59 @@ func init() {
 }
 
 var fileDescriptor_19864a2be3f704b5 = []byte{
-	// 763 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x55, 0xcf, 0x6f, 0xe2, 0x46,
-	0x18, 0x65, 0xf8, 0x55, 0xf8, 0x48, 0x88, 0x3b, 0x25, 0x2a, 0x2d, 0xaa, 0x1b, 0xd1, 0x43, 0xd2,
-	0xb4, 0x35, 0x0a, 0x91, 0x7a, 0xe9, 0x89, 0x82, 0x8b, 0xac, 0x82, 0xb1, 0x0c, 0xa9, 0xd4, 0x5c,
-	0x2c, 0x63, 0x06, 0xe2, 0x06, 0xdb, 0xc8, 0x36, 0x69, 0x92, 0xd3, 0xfe, 0x09, 0xab, 0xfd, 0x2b,
-	0xf6, 0xb6, 0xa7, 0xfd, 0x1f, 0xf6, 0x98, 0x63, 0x8e, 0x1b, 0x72, 0xd9, 0x63, 0xee, 0x7b, 0x59,
-	0x79, 0x6c, 0xc0, 0xeb, 0x20, 0xc2, 0x6a, 0xf7, 0x36, 0xf3, 0xbd, 0xf7, 0xbd, 0x19, 0xbf, 0xef,
-	0x59, 0x03, 0xdc, 0xe4, 0x7c, 0x54, 0x19, 0xa8, 0xae, 0x6a, 0xf5, 0xff, 0xab, 0xe8, 0xa6, 0x4b,
-	0x6c, 0x53, 0x1d, 0x57, 0x1c, 0xd7, 0x26, 0xaa, 0xe1, 0x18, 0x83, 0xe5, 0x8a, 0x9b, 0xd8, 0x96,
-	0x6b, 0xe1, 0x52, 0xc0, 0xe5, 0x0c, 0xe2, 0xaa, 0xde, 0x9a, 0x0b, 0x18, 0xdc, 0xc5, 0x51, 0xf9,
-	0x3d, 0x82, 0x74, 0x97, 0x6e, 0x71, 0x1b, 0x40, 0x1f, 0x10, 0xd3, 0xd5, 0x87, 0x3a, 0xb1, 0x8b,
-	0x68, 0x0f, 0x1d, 0xe4, 0xaa, 0xbf, 0x71, 0x6b, 0x9a, 0x39, 0xbf, 0x51, 0x58, 0x34, 0xc9, 0x21,
-	0x01, 0xfc, 0x0b, 0x7c, 0x3d, 0x35, 0x35, 0xcb, 0x98, 0xd8, 0xc4, 0x71, 0xc8, 0x40, 0x71, 0xf4,
-	0x6b, 0x52, 0x8c, 0xef, 0xa1, 0x83, 0x6d, 0x99, 0x09, 0x03, 0x5d, 0xfd, 0x9a, 0xe0, 0x7d, 0xd8,
-	0x89, 0x52, 0x13, 0x94, 0x9a, 0x7f, 0x4c, 0x9c, 0xdf, 0x44, 0xb1, 0x86, 0x43, 0x87, 0xb8, 0xc5,
-	0xa4, 0x4f, 0x9c, 0x97, 0x3b, 0xb4, 0x8a, 0x7f, 0x82, 0xed, 0x05, 0x91, 0xea, 0xa5, 0x28, 0x6d,
-	0x6b, 0x5e, 0xf4, 0xd4, 0xca, 0x2f, 0x10, 0x30, 0xd1, 0x8f, 0xc0, 0x7f, 0x43, 0x7a, 0xac, 0xf6,
-	0xc9, 0xd8, 0x29, 0xa2, 0xbd, 0xc4, 0x41, 0xae, 0x7a, 0xfc, 0x49, 0x1e, 0x70, 0x2d, 0xaf, 0x57,
-	0x0e, 0x24, 0xbe, 0x3f, 0x82, 0x14, 0x2d, 0x60, 0x0c, 0x49, 0x53, 0x35, 0x08, 0xf5, 0x35, 0x2b,
-	0xd3, 0x35, 0x2e, 0x40, 0xea, 0x42, 0x1d, 0x4f, 0x7d, 0x5b, 0xb2, 0xb2, 0xbf, 0x29, 0xbf, 0x4e,
-	0x40, 0xba, 0x6e, 0x8d, 0xa7, 0x86, 0xb9, 0xb2, 0xe9, 0x0f, 0x48, 0xba, 0x57, 0x13, 0xbf, 0x27,
-	0x5f, 0xdd, 0x5f, 0x7b, 0x39, 0x5f, 0xa6, 0x77, 0x35, 0x21, 0x32, 0x6d, 0xc2, 0x3f, 0x00, 0xd8,
-	0xd6, 0xff, 0x8e, 0xa2, 0x59, 0x53, 0xd3, 0x0d, 0x2c, 0xce, 0x7a, 0x95, 0xba, 0x57, 0xc0, 0x22,
-	0xe4, 0xe6, 0x7e, 0xeb, 0x96, 0x49, 0x9d, 0xcd, 0x57, 0x7f, 0x7d, 0xe2, 0x88, 0x05, 0x9f, 0x9e,
-	0x13, 0x16, 0x58, 0x9d, 0x81, 0xd4, 0xe6, 0x19, 0x48, 0x6f, 0x9a, 0x81, 0xaf, 0x36, 0xcb, 0x40,
-	0xe6, 0x71, 0x06, 0x70, 0x13, 0xc0, 0x71, 0x55, 0x57, 0x77, 0x5c, 0x5d, 0x73, 0x8a, 0x59, 0x1a,
-	0xfb, 0xfd, 0x27, 0x46, 0x3e, 0xa7, 0xcb, 0xa1, 0xd6, 0xf2, 0x35, 0xc0, 0x12, 0xc1, 0x25, 0xc8,
-	0x1a, 0xba, 0xa9, 0xf8, 0xf3, 0xf5, 0xe6, 0xb7, 0x25, 0x67, 0x0c, 0xdd, 0xfc, 0xc7, 0xdb, 0x53,
-	0x50, 0xbd, 0x54, 0x96, 0xc3, 0xf7, 0x40, 0xf5, 0xd2, 0x07, 0xab, 0xb0, 0x4b, 0xc7, 0xa3, 0x0c,
-	0x3c, 0x29, 0x53, 0x73, 0x15, 0xe7, 0x9c, 0xb8, 0xda, 0x59, 0x30, 0xae, 0x6f, 0x28, 0xd8, 0x08,
-	0xb0, 0x2e, 0x85, 0xca, 0xaf, 0x12, 0x90, 0x94, 0xd4, 0x11, 0x59, 0xed, 0x38, 0xda, 0xdc, 0xf1,
-	0xf8, 0x4a, 0xc7, 0x0b, 0x90, 0xd2, 0x6c, 0xed, 0xb8, 0x1a, 0x5c, 0xc1, 0xdf, 0x44, 0xc2, 0x94,
-	0x7c, 0x22, 0x4c, 0xa9, 0xcf, 0x0d, 0x13, 0x0f, 0x19, 0x62, 0x6a, 0xd6, 0x40, 0x37, 0x47, 0x34,
-	0x18, 0xf9, 0xea, 0xcf, 0x6b, 0xc5, 0xf8, 0x80, 0x4c, 0x95, 0x16, 0xad, 0xf8, 0x47, 0xc8, 0x3d,
-	0x4e, 0x0e, 0x84, 0x52, 0x53, 0x82, 0x6c, 0x34, 0x31, 0x99, 0x2f, 0x9e, 0x96, 0xc3, 0x4b, 0x80,
-	0xe5, 0xdf, 0x89, 0x4b, 0xf0, 0x6d, 0xbd, 0xd3, 0x3a, 0x69, 0x8b, 0x4a, 0xef, 0x5f, 0x89, 0x57,
-	0x4e, 0xc4, 0xae, 0xc4, 0xd7, 0x85, 0xbf, 0x04, 0xbe, 0xc1, 0xc4, 0xf0, 0x77, 0xb0, 0x1b, 0x06,
-	0x7b, 0x42, 0x9b, 0xef, 0xf6, 0x6a, 0x6d, 0x89, 0x41, 0xb8, 0x08, 0x85, 0x30, 0xd4, 0xe6, 0x7b,
-	0xb5, 0x46, 0xad, 0x57, 0x63, 0xe2, 0x51, 0xa4, 0xd5, 0x69, 0x2a, 0x2d, 0x41, 0xe4, 0x99, 0xc4,
-	0xe1, 0x29, 0xec, 0x44, 0x7c, 0xf6, 0x8f, 0x6f, 0x4b, 0x32, 0xdf, 0xed, 0x0a, 0x1d, 0x31, 0x72,
-	0x7c, 0x01, 0x98, 0x30, 0x28, 0x76, 0x44, 0x9e, 0x41, 0xd1, 0x6a, 0xf3, 0x54, 0x90, 0x98, 0xf8,
-	0xa1, 0x04, 0x5b, 0x61, 0xdb, 0xbd, 0x5b, 0xf0, 0x62, 0xbd, 0xd3, 0x10, 0xc4, 0x66, 0x44, 0x15,
-	0x43, 0x7e, 0x81, 0x48, 0xad, 0x9a, 0x20, 0x32, 0xe8, 0xa3, 0x5a, 0x83, 0x6f, 0x79, 0xdf, 0xf1,
-	0xe7, 0xf8, 0xe6, 0x8e, 0x8d, 0xdd, 0xde, 0xb1, 0xb1, 0x87, 0x3b, 0x16, 0x3d, 0x9b, 0xb1, 0xe8,
-	0xe5, 0x8c, 0x45, 0x6f, 0x66, 0x2c, 0xba, 0x99, 0xb1, 0xe8, 0xed, 0x8c, 0x45, 0xef, 0x66, 0x6c,
-	0xec, 0x61, 0xc6, 0xa2, 0xe7, 0xf7, 0x6c, 0xec, 0xe6, 0x9e, 0x8d, 0xdd, 0xde, 0xb3, 0xb1, 0xd3,
-	0xdf, 0x47, 0xba, 0x7b, 0x36, 0xed, 0x73, 0x9a, 0x65, 0x54, 0x46, 0xb6, 0x3a, 0x54, 0x4d, 0xb5,
-	0x32, 0xb6, 0xce, 0xf5, 0xca, 0xfa, 0xb7, 0xb3, 0x9f, 0xa6, 0x4f, 0xe6, 0xf1, 0x87, 0x00, 0x00,
-	0x00, 0xff, 0xff, 0x63, 0x68, 0xf3, 0x57, 0x64, 0x07, 0x00, 0x00,
+	// 824 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x56, 0x41, 0x6f, 0xe3, 0x44,
+	0x18, 0xcd, 0x34, 0x4d, 0x37, 0xf9, 0xda, 0xcd, 0x9a, 0x21, 0x2b, 0x02, 0x11, 0xa6, 0x32, 0x42,
+	0x5b, 0x0a, 0x38, 0xda, 0x54, 0xe2, 0xb2, 0xa7, 0x90, 0x98, 0xc8, 0x22, 0x76, 0x2c, 0x3b, 0x8b,
+	0x44, 0x2f, 0xd6, 0xc4, 0x99, 0x64, 0x4d, 0x63, 0x3b, 0xb2, 0x9d, 0xa5, 0xdb, 0x13, 0x3f, 0x01,
+	0xf1, 0x2b, 0xb8, 0x73, 0xe2, 0x1f, 0x70, 0xec, 0x71, 0x8f, 0x34, 0xbd, 0x70, 0xec, 0x3f, 0x00,
+	0x79, 0x6c, 0x27, 0xc6, 0x8d, 0xd2, 0x20, 0xb8, 0xcd, 0xbc, 0xf7, 0xbe, 0x6f, 0x66, 0xbe, 0xf7,
+	0x1c, 0x05, 0xc4, 0xf9, 0xc5, 0xb4, 0x39, 0x26, 0x21, 0xf1, 0x46, 0xdf, 0x37, 0x6d, 0x37, 0xa4,
+	0xbe, 0x4b, 0x66, 0xcd, 0x20, 0xf4, 0x29, 0x71, 0x02, 0x67, 0xbc, 0x5e, 0x89, 0x73, 0xdf, 0x0b,
+	0x3d, 0xdc, 0x48, 0xb4, 0xa2, 0x43, 0x43, 0x12, 0xad, 0xc5, 0x44, 0x21, 0xbe, 0x7e, 0x2e, 0x28,
+	0x50, 0x56, 0x12, 0x18, 0xb7, 0xe1, 0x51, 0xc2, 0xd4, 0xd1, 0x71, 0xf1, 0xe4, 0xb0, 0xf5, 0x4c,
+	0xdc, 0x52, 0x2a, 0x1a, 0x6c, 0x29, 0xbb, 0x13, 0x4f, 0x4f, 0xeb, 0x84, 0xbf, 0x10, 0xc0, 0x1a,
+	0xc7, 0x0a, 0x80, 0x3d, 0xa6, 0x6e, 0x68, 0x4f, 0x6c, 0xea, 0xd7, 0xd1, 0x31, 0x3a, 0x39, 0x6c,
+	0x7d, 0xb1, 0x4b, 0xd3, 0x55, 0x91, 0x9e, 0x69, 0x80, 0x3f, 0x83, 0x77, 0x16, 0xae, 0xe5, 0x39,
+	0x73, 0x9f, 0x06, 0x01, 0x1d, 0x9b, 0x81, 0x7d, 0x45, 0xeb, 0x7b, 0xc7, 0xe8, 0xe4, 0xb1, 0xce,
+	0x65, 0x09, 0xc3, 0xbe, 0xa2, 0xf8, 0x19, 0x3c, 0xc9, 0x4b, 0x8b, 0x4c, 0x5a, 0xbd, 0x2f, 0x4c,
+	0x6f, 0x62, 0x7a, 0x93, 0x49, 0x40, 0xc3, 0xfa, 0x7e, 0x2c, 0x4c, 0xe1, 0x01, 0x43, 0xf1, 0xc7,
+	0xf0, 0x78, 0x25, 0x64, 0xfd, 0x4a, 0x4c, 0x76, 0x94, 0x82, 0x51, 0x37, 0xe1, 0x67, 0x04, 0x5c,
+	0xfe, 0x11, 0xf8, 0x1b, 0x38, 0x98, 0x91, 0x11, 0x9d, 0xa5, 0x83, 0x3d, 0xfb, 0x57, 0x33, 0x10,
+	0xfb, 0x51, 0xad, 0x9e, 0xb4, 0xf8, 0xe0, 0x39, 0x94, 0x18, 0x80, 0x31, 0xec, 0xbb, 0xc4, 0xa1,
+	0x6c, 0xae, 0x15, 0x9d, 0xad, 0x71, 0x0d, 0x4a, 0xaf, 0xc9, 0x6c, 0x11, 0x8f, 0xa5, 0xa2, 0xc7,
+	0x1b, 0xc1, 0x80, 0x6a, 0xdc, 0x34, 0xeb, 0xb5, 0xe5, 0xcd, 0x16, 0x8e, 0xbb, 0x9b, 0xd7, 0x1d,
+	0xa6, 0x8d, 0xbd, 0x4e, 0xea, 0x84, 0xdf, 0x8a, 0x00, 0x6b, 0x7c, 0xe3, 0x6d, 0x5e, 0xc0, 0x7e,
+	0xf8, 0x66, 0x1e, 0x5f, 0xa6, 0xba, 0xd3, 0x11, 0xc3, 0x37, 0x73, 0xaa, 0xb3, 0x22, 0xfc, 0x21,
+	0x80, 0xef, 0xfd, 0x10, 0x98, 0x96, 0xb7, 0x70, 0xc3, 0xc4, 0xbb, 0x4a, 0x84, 0x74, 0x22, 0x00,
+	0xab, 0x70, 0x98, 0x1a, 0x69, 0x7b, 0x2e, 0xb3, 0xac, 0xda, 0xfa, 0xfc, 0x81, 0x23, 0x56, 0x7a,
+	0x76, 0x4e, 0xb6, 0xc1, 0xe6, 0x70, 0x95, 0x76, 0x0f, 0xd7, 0xc1, 0xae, 0xe1, 0x7a, 0xb4, 0x5b,
+	0xb8, 0xca, 0xf7, 0xc3, 0x85, 0x7b, 0x00, 0x41, 0x48, 0x42, 0x3b, 0x08, 0x6d, 0x2b, 0xa8, 0x57,
+	0xd8, 0xf7, 0xf4, 0xd0, 0x47, 0x9a, 0xca, 0xf5, 0x4c, 0xa9, 0x70, 0x15, 0x7d, 0xa6, 0xe9, 0x0e,
+	0x37, 0xa0, 0xe2, 0xd8, 0xae, 0x19, 0x07, 0x27, 0xf2, 0xef, 0x48, 0x2f, 0x3b, 0xb6, 0xfb, 0x6d,
+	0xb4, 0x67, 0x24, 0xb9, 0x34, 0xd7, 0xa9, 0x8a, 0x48, 0x72, 0x19, 0x93, 0x2d, 0x78, 0xca, 0xec,
+	0x31, 0xc7, 0x51, 0x2b, 0xd7, 0x0a, 0xcd, 0xe0, 0x82, 0x86, 0xd6, 0xab, 0xc4, 0xae, 0x77, 0x19,
+	0xd9, 0x4d, 0x38, 0x83, 0x51, 0x82, 0x02, 0xd5, 0xd8, 0xeb, 0x55, 0x18, 0x5f, 0x40, 0x69, 0x4e,
+	0xa6, 0x34, 0x8d, 0xe2, 0x27, 0x5b, 0x5f, 0xa4, 0x91, 0x29, 0x65, 0x41, 0x8c, 0x6b, 0x84, 0x5f,
+	0x8b, 0x50, 0x4e, 0xb1, 0xcd, 0x26, 0xa2, 0xdd, 0x4d, 0xdc, 0xdb, 0x68, 0x62, 0x0d, 0x4a, 0x96,
+	0x6f, 0x9d, 0xb5, 0x92, 0x57, 0xc5, 0x9b, 0x5c, 0x3e, 0xf7, 0x1f, 0xc8, 0x67, 0xe9, 0xbf, 0xe6,
+	0x53, 0x82, 0x32, 0x75, 0x2d, 0x6f, 0x6c, 0xbb, 0x53, 0x96, 0xb5, 0x6a, 0xeb, 0xd3, 0xad, 0xcd,
+	0xa4, 0x44, 0xcc, 0x3a, 0xad, 0x4a, 0xf1, 0x47, 0x70, 0x78, 0x3f, 0x8c, 0x90, 0x09, 0x62, 0x03,
+	0x2a, 0xf9, 0x10, 0x96, 0xff, 0xf7, 0x00, 0x9e, 0x5e, 0xa6, 0xbf, 0x1d, 0xd1, 0xf5, 0x70, 0x03,
+	0xde, 0xeb, 0x0c, 0xfa, 0x2f, 0x15, 0xd5, 0x1c, 0x7e, 0xa7, 0x49, 0xe6, 0x4b, 0xd5, 0xd0, 0xa4,
+	0x8e, 0xfc, 0xb5, 0x2c, 0x75, 0xb9, 0x02, 0x7e, 0x1f, 0x9e, 0x66, 0xc9, 0xa1, 0xac, 0x48, 0xc6,
+	0xb0, 0xad, 0x68, 0x1c, 0xc2, 0x75, 0xa8, 0x65, 0x29, 0x45, 0x1a, 0xb6, 0xbb, 0xed, 0x61, 0x9b,
+	0xdb, 0xcb, 0x33, 0xfd, 0x41, 0xcf, 0xec, 0xcb, 0xaa, 0xc4, 0x15, 0x4f, 0xcf, 0xe1, 0x49, 0x6e,
+	0xce, 0xf1, 0xf1, 0x8a, 0xa6, 0x4b, 0x86, 0x21, 0x0f, 0xd4, 0xdc, 0xf1, 0x35, 0xe0, 0xb2, 0xa4,
+	0x3a, 0x50, 0x25, 0x0e, 0xe5, 0xd1, 0xde, 0xb9, 0xac, 0x71, 0x7b, 0xa7, 0x1a, 0x1c, 0x65, 0xc7,
+	0x1e, 0xdd, 0x42, 0x52, 0x3b, 0x83, 0xae, 0xac, 0xf6, 0x72, 0x5d, 0x31, 0x54, 0x57, 0x8c, 0xd6,
+	0x6f, 0xcb, 0x2a, 0x87, 0xfe, 0x81, 0x75, 0xa5, 0x7e, 0xf4, 0x8e, 0xaf, 0x66, 0xd7, 0x37, 0x7c,
+	0xe1, 0xed, 0x0d, 0x5f, 0xb8, 0xbb, 0xe1, 0xd1, 0x8f, 0x4b, 0x1e, 0xfd, 0xb2, 0xe4, 0xd1, 0xef,
+	0x4b, 0x1e, 0x5d, 0x2f, 0x79, 0xf4, 0xc7, 0x92, 0x47, 0x7f, 0x2e, 0xf9, 0xc2, 0xdd, 0x92, 0x47,
+	0x3f, 0xdd, 0xf2, 0x85, 0xeb, 0x5b, 0xbe, 0xf0, 0xf6, 0x96, 0x2f, 0x9c, 0x7f, 0x39, 0xb5, 0xc3,
+	0x57, 0x8b, 0x91, 0x68, 0x79, 0x4e, 0x73, 0xea, 0x93, 0x09, 0x71, 0x49, 0x73, 0xe6, 0x5d, 0xd8,
+	0xcd, 0xed, 0x7f, 0x1d, 0x46, 0x07, 0xec, 0x1f, 0xc3, 0xd9, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff,
+	0xe4, 0x80, 0x0f, 0x07, 0x63, 0x08, 0x00, 0x00,
 }
 
 func (x ColumnType) String() string {
@@ -683,14 +825,43 @@ func (x EncodingType) String() string {
 	}
 	return strconv.Itoa(int(x))
 }
-func (this *Stream) Equal(that interface{}) bool {
+func (this *Metadata) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*Stream)
+	that1, ok := that.(*Metadata)
 	if !ok {
-		that2, ok := that.(Stream)
+		that2, ok := that.(Metadata)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.Streams) != len(that1.Streams) {
+		return false
+	}
+	for i := range this.Streams {
+		if !this.Streams[i].Equal(that1.Streams[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *StreamInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*StreamInfo)
+	if !ok {
+		that2, ok := that.(StreamInfo)
 		if ok {
 			that1 = &that2
 		} else {
@@ -775,14 +946,43 @@ func (this *StreamIdentifier_Label) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *Column) Equal(that interface{}) bool {
+func (this *StreamMetadata) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*Column)
+	that1, ok := that.(*StreamMetadata)
 	if !ok {
-		that2, ok := that.(Column)
+		that2, ok := that.(StreamMetadata)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.Columns) != len(that1.Columns) {
+		return false
+	}
+	for i := range this.Columns {
+		if !this.Columns[i].Equal(that1.Columns[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *ColumnInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ColumnInfo)
+	if !ok {
+		that2, ok := that.(ColumnInfo)
 		if ok {
 			that1 = &that2
 		} else {
@@ -853,14 +1053,43 @@ func (this *Statistics) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *Page) Equal(that interface{}) bool {
+func (this *ColumnMetadata) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*Page)
+	that1, ok := that.(*ColumnMetadata)
 	if !ok {
-		that2, ok := that.(Page)
+		that2, ok := that.(ColumnMetadata)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.Pages) != len(that1.Pages) {
+		return false
+	}
+	for i := range this.Pages {
+		if !this.Pages[i].Equal(that1.Pages[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *PageInfo) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*PageInfo)
+	if !ok {
+		that2, ok := that.(PageInfo)
 		if ok {
 			that1 = &that2
 		} else {
@@ -901,12 +1130,24 @@ func (this *Page) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *Stream) GoString() string {
+func (this *Metadata) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&streamsmd.Metadata{")
+	if this.Streams != nil {
+		s = append(s, "Streams: "+fmt.Sprintf("%#v", this.Streams)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *StreamInfo) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 9)
-	s = append(s, "&streamsmd.Stream{")
+	s = append(s, "&streamsmd.StreamInfo{")
 	if this.Identifier != nil {
 		s = append(s, "Identifier: "+fmt.Sprintf("%#v", this.Identifier)+",\n")
 	}
@@ -940,12 +1181,24 @@ func (this *StreamIdentifier_Label) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *Column) GoString() string {
+func (this *StreamMetadata) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&streamsmd.StreamMetadata{")
+	if this.Columns != nil {
+		s = append(s, "Columns: "+fmt.Sprintf("%#v", this.Columns)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ColumnInfo) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 13)
-	s = append(s, "&streamsmd.Column{")
+	s = append(s, "&streamsmd.ColumnInfo{")
 	s = append(s, "Name: "+fmt.Sprintf("%#v", this.Name)+",\n")
 	s = append(s, "Type: "+fmt.Sprintf("%#v", this.Type)+",\n")
 	s = append(s, "RowsCount: "+fmt.Sprintf("%#v", this.RowsCount)+",\n")
@@ -972,12 +1225,24 @@ func (this *Statistics) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *Page) GoString() string {
+func (this *ColumnMetadata) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&streamsmd.ColumnMetadata{")
+	if this.Pages != nil {
+		s = append(s, "Pages: "+fmt.Sprintf("%#v", this.Pages)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *PageInfo) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 13)
-	s = append(s, "&streamsmd.Page{")
+	s = append(s, "&streamsmd.PageInfo{")
 	s = append(s, "UncompressedSize: "+fmt.Sprintf("%#v", this.UncompressedSize)+",\n")
 	s = append(s, "CompressedSize: "+fmt.Sprintf("%#v", this.CompressedSize)+",\n")
 	s = append(s, "Crc32: "+fmt.Sprintf("%#v", this.Crc32)+",\n")
@@ -1000,7 +1265,7 @@ func valueToGoStringStreamsmd(v interface{}, typ string) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
 }
-func (m *Stream) Marshal() (dAtA []byte, err error) {
+func (m *Metadata) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1010,12 +1275,49 @@ func (m *Stream) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *Stream) MarshalTo(dAtA []byte) (int, error) {
+func (m *Metadata) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *Stream) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *Metadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Streams) > 0 {
+		for iNdEx := len(m.Streams) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Streams[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintStreamsmd(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *StreamInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *StreamInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *StreamInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1129,7 +1431,7 @@ func (m *StreamIdentifier_Label) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	return len(dAtA) - i, nil
 }
 
-func (m *Column) Marshal() (dAtA []byte, err error) {
+func (m *StreamMetadata) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1139,12 +1441,49 @@ func (m *Column) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *Column) MarshalTo(dAtA []byte) (int, error) {
+func (m *StreamMetadata) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *Column) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *StreamMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for iNdEx := len(m.Columns) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Columns[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintStreamsmd(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ColumnInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ColumnInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ColumnInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1248,7 +1587,7 @@ func (m *Statistics) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *Page) Marshal() (dAtA []byte, err error) {
+func (m *ColumnMetadata) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -1258,12 +1597,49 @@ func (m *Page) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *Page) MarshalTo(dAtA []byte) (int, error) {
+func (m *ColumnMetadata) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *Page) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ColumnMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Pages) > 0 {
+		for iNdEx := len(m.Pages) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Pages[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintStreamsmd(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *PageInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *PageInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *PageInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1334,7 +1710,22 @@ func encodeVarintStreamsmd(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *Stream) Size() (n int) {
+func (m *Metadata) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Streams) > 0 {
+		for _, e := range m.Streams {
+			l = e.Size()
+			n += 1 + l + sovStreamsmd(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *StreamInfo) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1391,7 +1782,22 @@ func (m *StreamIdentifier_Label) Size() (n int) {
 	return n
 }
 
-func (m *Column) Size() (n int) {
+func (m *StreamMetadata) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Columns) > 0 {
+		for _, e := range m.Columns {
+			l = e.Size()
+			n += 1 + l + sovStreamsmd(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *ColumnInfo) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1449,7 +1855,22 @@ func (m *Statistics) Size() (n int) {
 	return n
 }
 
-func (m *Page) Size() (n int) {
+func (m *ColumnMetadata) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Pages) > 0 {
+		for _, e := range m.Pages {
+			l = e.Size()
+			n += 1 + l + sovStreamsmd(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *PageInfo) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1492,11 +1913,26 @@ func sovStreamsmd(x uint64) (n int) {
 func sozStreamsmd(x uint64) (n int) {
 	return sovStreamsmd(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *Stream) String() string {
+func (this *Metadata) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&Stream{`,
+	repeatedStringForStreams := "[]*StreamInfo{"
+	for _, f := range this.Streams {
+		repeatedStringForStreams += strings.Replace(f.String(), "StreamInfo", "StreamInfo", 1) + ","
+	}
+	repeatedStringForStreams += "}"
+	s := strings.Join([]string{`&Metadata{`,
+		`Streams:` + repeatedStringForStreams + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *StreamInfo) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&StreamInfo{`,
 		`Identifier:` + strings.Replace(this.Identifier.String(), "StreamIdentifier", "StreamIdentifier", 1) + `,`,
 		`UncompressedSize:` + fmt.Sprintf("%v", this.UncompressedSize) + `,`,
 		`CompressedSize:` + fmt.Sprintf("%v", this.CompressedSize) + `,`,
@@ -1532,11 +1968,26 @@ func (this *StreamIdentifier_Label) String() string {
 	}, "")
 	return s
 }
-func (this *Column) String() string {
+func (this *StreamMetadata) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&Column{`,
+	repeatedStringForColumns := "[]*ColumnInfo{"
+	for _, f := range this.Columns {
+		repeatedStringForColumns += strings.Replace(f.String(), "ColumnInfo", "ColumnInfo", 1) + ","
+	}
+	repeatedStringForColumns += "}"
+	s := strings.Join([]string{`&StreamMetadata{`,
+		`Columns:` + repeatedStringForColumns + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ColumnInfo) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ColumnInfo{`,
 		`Name:` + fmt.Sprintf("%v", this.Name) + `,`,
 		`Type:` + fmt.Sprintf("%v", this.Type) + `,`,
 		`RowsCount:` + fmt.Sprintf("%v", this.RowsCount) + `,`,
@@ -1562,11 +2013,26 @@ func (this *Statistics) String() string {
 	}, "")
 	return s
 }
-func (this *Page) String() string {
+func (this *ColumnMetadata) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&Page{`,
+	repeatedStringForPages := "[]*PageInfo{"
+	for _, f := range this.Pages {
+		repeatedStringForPages += strings.Replace(f.String(), "PageInfo", "PageInfo", 1) + ","
+	}
+	repeatedStringForPages += "}"
+	s := strings.Join([]string{`&ColumnMetadata{`,
+		`Pages:` + repeatedStringForPages + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *PageInfo) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&PageInfo{`,
 		`UncompressedSize:` + fmt.Sprintf("%v", this.UncompressedSize) + `,`,
 		`CompressedSize:` + fmt.Sprintf("%v", this.CompressedSize) + `,`,
 		`Crc32:` + fmt.Sprintf("%v", this.Crc32) + `,`,
@@ -1588,7 +2054,7 @@ func valueToStringStreamsmd(v interface{}) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
 }
-func (m *Stream) Unmarshal(dAtA []byte) error {
+func (m *Metadata) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1611,10 +2077,97 @@ func (m *Stream) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Stream: wiretype end group for non-group")
+			return fmt.Errorf("proto: Metadata: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Stream: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Metadata: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Streams", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStreamsmd
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Streams = append(m.Streams, &StreamInfo{})
+			if err := m.Streams[len(m.Streams)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStreamsmd(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *StreamInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStreamsmd
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: StreamInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: StreamInfo: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1957,7 +2510,7 @@ func (m *StreamIdentifier_Label) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Column) Unmarshal(dAtA []byte) error {
+func (m *StreamMetadata) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1980,10 +2533,97 @@ func (m *Column) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Column: wiretype end group for non-group")
+			return fmt.Errorf("proto: StreamMetadata: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Column: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: StreamMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Columns", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStreamsmd
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Columns = append(m.Columns, &ColumnInfo{})
+			if err := m.Columns[len(m.Columns)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStreamsmd(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ColumnInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStreamsmd
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ColumnInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ColumnInfo: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -2351,7 +2991,7 @@ func (m *Statistics) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Page) Unmarshal(dAtA []byte) error {
+func (m *ColumnMetadata) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -2374,10 +3014,97 @@ func (m *Page) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: Page: wiretype end group for non-group")
+			return fmt.Errorf("proto: ColumnMetadata: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Page: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ColumnMetadata: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pages", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowStreamsmd
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Pages = append(m.Pages, &PageInfo{})
+			if err := m.Pages[len(m.Pages)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipStreamsmd(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthStreamsmd
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *PageInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowStreamsmd
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PageInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PageInfo: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

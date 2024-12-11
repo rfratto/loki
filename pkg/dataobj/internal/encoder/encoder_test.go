@@ -113,7 +113,7 @@ func Test(t *testing.T) {
 	}
 }
 
-func allPages(dec decoder.StreamsDecoder, col streamsmd.Column) ([]streams.Page, error) {
+func allPages(dec decoder.StreamsDecoder, col *streamsmd.ColumnInfo) ([]streams.Page, error) {
 	var pages []streams.Page
 
 	headers, err := dec.Pages(context.Background(), col)

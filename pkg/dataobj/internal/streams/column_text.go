@@ -16,7 +16,7 @@ import (
 // IterTextPage returns an iterator over a page of values in a text-based
 // column. IterTextPage yields an error if the column does not contain text or
 // the page could not be read.
-func IterTextPage(col streamsmd.Column, page Page) iter.Seq2[string, error] {
+func IterTextPage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		if !isTextColumn(col) {
 			yield("", fmt.Errorf("column type %s does not contain text data", col.Type))
@@ -38,7 +38,7 @@ func IterTextPage(col streamsmd.Column, page Page) iter.Seq2[string, error] {
 	}
 }
 
-func isTextColumn(col streamsmd.Column) bool {
+func isTextColumn(col *streamsmd.ColumnInfo) bool {
 	return col.Type == streamsmd.COLUMN_TYPE_LOG_LINE || col.Type == streamsmd.COLUMN_TYPE_METADATA
 }
 

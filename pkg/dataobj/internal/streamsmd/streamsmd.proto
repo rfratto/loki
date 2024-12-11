@@ -4,8 +4,14 @@ package dataobj.metadata.streams.v1;
 
 option go_package = "github.com/grafana/loki/pkg/dataobj/internal/streamsmd";
 
-// Stream describes an individual log stream within the streams section.
-message Stream {
+// Metadata describes the metadata for the streams section.
+message Metadata {
+  // Streams within the section.
+  repeated StreamInfo streams = 1;
+}
+
+// StreamInfo describes an individual log stream within the streams section.
+message StreamInfo {
   // Label set representing the stream.
   StreamIdentifier identifier = 1;
 
@@ -34,8 +40,14 @@ message StreamIdentifier {
   repeated Label labels = 1;
 }
 
-// Column describes an individual column within a stream.
-message Column {
+// StreamMetadata describes the metadata for a stream.
+message StreamMetadata {
+  // Columns within the stream.
+  repeated ColumnInfo columns = 1;
+}
+
+// ColumnInfo describes an individual column within a stream.
+message ColumnInfo {
   // Name of the column; set only for COLUMN_TYPE_METADATA.
   string name = 1;
 
@@ -106,8 +118,14 @@ message Statistics {
   uint32 count_distinct_sketch = 3;
 }
 
+// ColumnMetadata describes the metadata for a column.
+message ColumnMetadata {
+  // Pages within the column.
+  repeated PageInfo pages = 1;
+}
+
 // Page describes an individual page within a column.
-message Page {
+message PageInfo {
   // Uncompressed size of the page within the data object.
   uint32 uncompressed_size = 1;
 

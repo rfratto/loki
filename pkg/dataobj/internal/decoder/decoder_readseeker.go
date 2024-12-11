@@ -53,7 +53,7 @@ type readSeekerStreamsDecoder struct {
 }
 
 // Streams retrieves the set of streams from the provided streams section.
-func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec *filemd.SectionInfo) ([]streamsmd.Stream, error) {
+func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec *filemd.SectionInfo) ([]*streamsmd.StreamInfo, error) {
 	if sec.Type != filemd.SECTION_TYPE_STREAMS {
 		return nil, fmt.Errorf("section is type %s, not streams", sec.Type)
 	}
@@ -62,29 +62,44 @@ func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec *filemd.Sect
 		return nil, fmt.Errorf("seek to streams section metadata: %w", err)
 	}
 	r := bufio.NewReader(io.LimitReader(dec.r, int64(sec.MetadataSize)))
-	return scanStreamsMetadata(r)
+
+	md, err := scanStreamsMetadata(r)
+	if err != nil {
+		return nil, err
+	}
+	return md.Streams, nil
 }
 
 // Columns retrieves the set of columns from the provided stream.
-func (dec *readSeekerStreamsDecoder) Columns(_ context.Context, stream streamsmd.Stream) ([]streamsmd.Column, error) {
+func (dec *readSeekerStreamsDecoder) Columns(_ context.Context, stream *streamsmd.StreamInfo) ([]*streamsmd.ColumnInfo, error) {
 	if _, err := dec.r.Seek(int64(stream.MetadataOffset), io.SeekStart); err != nil {
 		return nil, fmt.Errorf("seek to stream metadata: %w", err)
 	}
 	r := bufio.NewReader(io.LimitReader(dec.r, int64(stream.MetadataSize)))
-	return scanStreamMetadata(r)
+
+	md, err := scanStreamMetadata(r)
+	if err != nil {
+		return nil, err
+	}
+	return md.Columns, nil
 }
 
 // Pages returns an iterator over pages from the provided column.
-func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, col streamsmd.Column) ([]streamsmd.Page, error) {
+func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, col *streamsmd.ColumnInfo) ([]*streamsmd.PageInfo, error) {
 	if _, err := dec.r.Seek(int64(col.MetadataOffset), io.SeekStart); err != nil {
 		return nil, fmt.Errorf("seek to column metadata: %w", err)
 	}
 	r := bufio.NewReader(io.LimitReader(dec.r, int64(col.MetadataSize)))
-	return scanColumnMetadata(r)
+
+	md, err := scanColumnMetadata(r)
+	if err != nil {
+		return nil, err
+	}
+	return md.Pages, nil
 }
 
-func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []streamsmd.Page) iter.Seq2[streams.Page, error] {
-	readPage := func(page streamsmd.Page) (streams.Page, error) {
+func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*streamsmd.PageInfo) iter.Seq2[streams.Page, error] {
+	readPage := func(page *streamsmd.PageInfo) (streams.Page, error) {
 		if _, err := dec.r.Seek(int64(page.DataOffset), io.SeekStart); err != nil {
 			return streams.Page{}, err
 		}
