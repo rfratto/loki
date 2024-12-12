@@ -133,7 +133,7 @@ func (p *headTextPage) Append(row int, text string) bool {
 		// append empty strings. We may see this happen more frequently after
 		// sorting a stream by timestamp, as backfilled rows may be split up.
 		//
-		// We may wish to add support for NULLS (zero values) at the Column level
+		// We may wish to add support for NULLS (zero values) at the [Column] level
 		// and have it flush a sequence of NULLS via a Backfill call once it
 		// receives as non-NULL value or upon calling [Column.cutPage].
 		return p.Backfill(row)
