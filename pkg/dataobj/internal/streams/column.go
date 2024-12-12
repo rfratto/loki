@@ -17,10 +17,10 @@ type Column[RowType any] struct {
 	ty          streamsmd.ColumnType      // Column type.
 	compression streamsmd.CompressionType // Compression used for column.
 
-	// columnRows tracks the number of rows in the column, not including the head
+	// pageRows tracks the number of rows in the column, not including the head
 	// page. It's updated when a page is cut.
-	columnRows int
-	headRows   int // headRows tracks the number of rows in the head page.
+	pageRows int
+	headRows int // headRows tracks the number of rows in the head page.
 
 	pages    []Page
 	pageIter func(s scanner.Scanner, rows int) iter.Seq2[RowType, error]
@@ -55,7 +55,7 @@ func (c *Column[RowType]) Append(row int, value RowType) {
 
 // headRow gets the head page row number from the column row number.
 func (c *Column[RowType]) headRow(columnRow int) int {
-	return columnRow - c.columnRows
+	return columnRow - c.pageRows
 }
 
 // updateHeadRowCount updates the head page's row count if the provided head
@@ -70,13 +70,18 @@ func (c *Column[RowType]) updateHeadRowCount(headRow int) {
 	}
 }
 
-// cutPage flushes the current head page to a [Page] and appends it to the column.
+// cutPage flushes the current head page to a [Page] and appends it to the
+// column. If the head page is empty, cutPage does nothing.
 func (c *Column[RowType]) cutPage() {
+	if _, rows := c.curPage.Data(); rows == 0 {
+		return
+	}
+
 	page, err := c.curPage.Flush()
 	if err != nil {
 		panic(fmt.Sprintf("failed to flush page: %v", err))
 	}
-	c.columnRows += page.RowCount
+	c.pageRows += page.RowCount
 	c.headRows = 0 // Reset the head page row count.
 	c.pages = append(c.pages, page)
 }

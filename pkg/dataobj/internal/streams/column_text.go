@@ -180,6 +180,10 @@ func (p *headTextPage) Data() ([]byte, int) {
 
 // Flush returns a page from p, then resets p for new data.
 func (p *headTextPage) Flush() (Page, error) {
+	if p.rows == 0 {
+		return Page{}, errors.New("headTextPage.Flush: page is empty")
+	}
+
 	buf, crc32, err := compressData(p.buf, textColumnCompression)
 	if err != nil {
 		return Page{}, fmt.Errorf("compressing text page: %w", err)

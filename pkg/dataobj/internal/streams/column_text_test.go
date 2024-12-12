@@ -7,7 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_newTextColumn(t *testing.T) {
+// Test_Column_cutPage ensures that cutPage does not produce a page with no
+// data.
+func Test_Column_cutPage(t *testing.T) {
+	col := NewLogColumn(10)
+	col.cutPage()
+	require.Equal(t, 0, len(col.pages), "cutPage should not produce a page with no data")
+}
+
+func Test_NewTextColumn(t *testing.T) {
 	strings := []string{
 		"Hello, world!",
 		"Goodbye, world!",
