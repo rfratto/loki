@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 )
 
 const (
@@ -162,7 +162,7 @@ type Stream struct {
 //
 // If opening a new column would exceed the maximum metadata size for Stream,
 // OpenColumn returns an error.
-func (s *Stream) OpenColumn(column streams.ColumnInfo) (*Column, error) {
+func (s *Stream) OpenColumn(column logstreams.ColumnInfo) (*Column, error) {
 	if s.closed {
 		return nil, ErrClosed
 	} else if s.inuse {
@@ -314,7 +314,7 @@ type Column struct {
 //
 // If appending a new page would exceed the maximum metadata size for Column,
 // AppendPage returns an error.
-func (c *Column) AppendPage(page streams.Page) error {
+func (c *Column) AppendPage(page logstreams.Page) error {
 	if c.closed {
 		return ErrClosed
 	}

@@ -11,12 +11,13 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/thanos-io/objstore"
+	"go.uber.org/atomic"
+
 	"github.com/grafana/dskit/flagext"
 	"github.com/grafana/loki/pkg/push"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoder"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
-	"github.com/thanos-io/objstore"
-	"go.uber.org/atomic"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 )
 
 // TODO(rfratto): validate the BuilderConfig with min/max limits; page size and
@@ -296,7 +297,7 @@ func (b *Builder) compressedSize(includeHead bool) int {
 type tenant struct {
 	builder *Builder
 	ID      string
-	streams map[string]*streams.Stream
+	streams map[string]*logstreams.Stream
 }
 
 // newTenant creates a new tenant buffer with the provided ID.
@@ -309,7 +310,7 @@ func (b *Builder) newTenant(ID string) *tenant {
 
 func (t *tenant) Append(ctx context.Context, entries push.PushRequest) error {
 	if t.streams == nil {
-		t.streams = make(map[string]*streams.Stream)
+		t.streams = make(map[string]*logstreams.Stream)
 	}
 
 	var errs []error
@@ -317,7 +318,7 @@ func (t *tenant) Append(ctx context.Context, entries push.PushRequest) error {
 	for _, pushStream := range entries.Streams {
 		dataStream, ok := t.streams[pushStream.Labels]
 		if !ok {
-			newStream, err := streams.NewStream(uint64(t.builder.cfg.MaxPageSize), pushStream.Labels)
+			newStream, err := logstreams.NewStream(uint64(t.builder.cfg.MaxPageSize), pushStream.Labels)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("creating stream %q: %w", pushStream.Labels, err))
 				continue

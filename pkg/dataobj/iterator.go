@@ -8,8 +8,8 @@ import (
 
 	"github.com/grafana/loki/pkg/push"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 )
 
 type entryIterator struct {
@@ -59,7 +59,7 @@ func lazyTimeIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logs
 				return
 			}
 
-			for ts, err := range streams.IterTimePage(col, pageData) {
+			for ts, err := range logstreams.IterTimePage(col, pageData) {
 				if !yield(ts, err) {
 					return
 				}
@@ -79,7 +79,7 @@ func lazyTextIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logs
 				return
 			}
 
-			for ts, err := range streams.IterTimePage(col, pageData) {
+			for ts, err := range logstreams.IterTimePage(col, pageData) {
 				if !yield(ts, err) {
 					return
 				}

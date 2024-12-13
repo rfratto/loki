@@ -1,4 +1,4 @@
-package streams
+package logstreams
 
 import (
 	"bytes"

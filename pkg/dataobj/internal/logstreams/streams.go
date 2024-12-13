@@ -1,7 +1,7 @@
-// Package streams holds utilities for constructing data for the data object
-// streams section in memory, stored in a [Stream]. Use the builder package to
-// construct data objects from this data.
-package streams
+// Package logstreams holds utilities for constructing data for the data object
+// logstreams section in memory, stored in a [Stream]. Use the builder package
+// to construct data objects from this data.
+package logstreams
 
 import (
 	"context"

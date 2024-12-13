@@ -8,8 +8,8 @@ import (
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 )
 
 // TODO(rfratto): This package was hastily through together just for testing
@@ -43,6 +43,6 @@ type (
 		Pages(ctx context.Context, col *logstreamsmd.ColumnInfo) ([]*logstreamsmd.PageInfo, error)
 
 		// ReadPages reads the pages from the column.
-		ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[streams.Page, error]
+		ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[logstreams.Page, error]
 	}
 )

@@ -9,8 +9,8 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +30,7 @@ func Test(t *testing.T) {
 	stream, err := streamsSection.OpenStream(streamID)
 	require.NoError(t, err)
 
-	col, err := stream.OpenColumn(streams.ColumnInfo{
+	col, err := stream.OpenColumn(logstreams.ColumnInfo{
 		Name:             "foo",
 		Type:             logstreamsmd.COLUMN_TYPE_METADATA,
 		RowsCount:        2,
@@ -43,7 +43,7 @@ func Test(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	pages := []streams.Page{{
+	pages := []logstreams.Page{{
 		UncompressedSize: 5,
 		CompressedSize:   5,
 		CRC32:            0,
@@ -113,8 +113,8 @@ func Test(t *testing.T) {
 	}
 }
 
-func allPages(dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo) ([]streams.Page, error) {
-	var pages []streams.Page
+func allPages(dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo) ([]logstreams.Page, error) {
+	var pages []logstreams.Page
 
 	headers, err := dec.Pages(context.Background(), col)
 	if err != nil {

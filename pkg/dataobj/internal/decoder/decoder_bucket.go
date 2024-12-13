@@ -10,8 +10,8 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 )
 
 type bucketDecoder struct {
@@ -134,20 +134,20 @@ func (bd *bucketStreamsDecoder) Pages(ctx context.Context, col *logstreamsmd.Col
 	return md.Pages, nil
 }
 
-func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[streams.Page, error] {
-	readPage := func(ctx context.Context, path string, page *logstreamsmd.PageInfo) (streams.Page, error) {
+func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[logstreams.Page, error] {
+	readPage := func(ctx context.Context, path string, page *logstreamsmd.PageInfo) (logstreams.Page, error) {
 		rc, err := bd.bucket.GetRange(ctx, path, int64(page.DataOffset), int64(page.DataSize))
 		if err != nil {
-			return streams.Page{}, err
+			return logstreams.Page{}, err
 		}
 		defer rc.Close()
 
 		pageData, err := io.ReadAll(rc)
 		if err != nil {
-			return streams.Page{}, fmt.Errorf("reading page data: %w", err)
+			return logstreams.Page{}, fmt.Errorf("reading page data: %w", err)
 		}
 
-		return streams.Page{
+		return logstreams.Page{
 			UncompressedSize: int(page.UncompressedSize),
 			CompressedSize:   int(page.CompressedSize),
 			CRC32:            uint32(page.Crc32),
@@ -161,7 +161,7 @@ func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*logstrea
 		}, nil
 	}
 
-	return func(yield func(streams.Page, error) bool) {
+	return func(yield func(logstreams.Page, error) bool) {
 		// TODO(rfratto): this could be optimized by getting multiple pages at
 		// once; pages that are right next to one another can be read in a single
 		// pass, but we can also tolerate some amount of unused data in between to

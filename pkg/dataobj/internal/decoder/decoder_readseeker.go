@@ -9,8 +9,8 @@ import (
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
 )
 
 type readSeekerDecoder struct {
@@ -98,20 +98,20 @@ func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, col *logstreamsmd.
 	return md.Pages, nil
 }
 
-func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[streams.Page, error] {
-	readPage := func(page *logstreamsmd.PageInfo) (streams.Page, error) {
+func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[logstreams.Page, error] {
+	readPage := func(page *logstreamsmd.PageInfo) (logstreams.Page, error) {
 		if _, err := dec.r.Seek(int64(page.DataOffset), io.SeekStart); err != nil {
-			return streams.Page{}, err
+			return logstreams.Page{}, err
 		}
 
 		data := make([]byte, page.DataSize)
 		if sz, err := dec.r.Read(data); err != nil {
-			return streams.Page{}, fmt.Errorf("read page data: %w", err)
+			return logstreams.Page{}, fmt.Errorf("read page data: %w", err)
 		} else if uint32(sz) != page.DataSize {
-			return streams.Page{}, fmt.Errorf("read page data: short read")
+			return logstreams.Page{}, fmt.Errorf("read page data: short read")
 		}
 
-		return streams.Page{
+		return logstreams.Page{
 			UncompressedSize: int(page.UncompressedSize),
 			CompressedSize:   int(page.CompressedSize),
 			CRC32:            uint32(page.Crc32),
@@ -125,7 +125,7 @@ func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*logst
 		}, nil
 	}
 
-	return func(yield func(streams.Page, error) bool) {
+	return func(yield func(logstreams.Page, error) bool) {
 		for _, pageHeader := range pages {
 			page, err := readPage(pageHeader)
 			if !yield(page, err) {
