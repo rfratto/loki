@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 )
 
 const (

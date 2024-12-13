@@ -8,9 +8,9 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoder"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
 )

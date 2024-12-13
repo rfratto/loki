@@ -9,9 +9,9 @@ import (
 
 	"github.com/thanos-io/objstore"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
 )
 
 type bucketDecoder struct {

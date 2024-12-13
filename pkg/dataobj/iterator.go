@@ -9,7 +9,7 @@ import (
 	"github.com/grafana/loki/pkg/push"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
 )
 
 type entryIterator struct {

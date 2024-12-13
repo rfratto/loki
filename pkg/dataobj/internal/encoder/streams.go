@@ -5,7 +5,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
 )
 
 const (

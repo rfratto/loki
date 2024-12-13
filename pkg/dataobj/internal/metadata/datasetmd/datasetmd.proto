@@ -3,7 +3,7 @@ syntax = "proto3";
 
 package dataobj.metadata.dataset.v1;
 
-option go_package = "github.com/grafana/loki/v3/pkg/dataobj/internal/datasetmd";
+option go_package = "github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd";
 
 // ColumnInfo describes an individual column within a data set.
 message ColumnInfo {

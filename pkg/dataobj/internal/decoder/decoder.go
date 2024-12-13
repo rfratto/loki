@@ -7,9 +7,9 @@ import (
 	"context"
 	"iter"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
 )
 
 // TODO(rfratto): This package was hastily through together just for testing
