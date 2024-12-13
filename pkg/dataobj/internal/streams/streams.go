@@ -24,6 +24,9 @@ type Stream struct {
 	metadata  map[string]*Column[string]
 	logColumn *Column[string]
 	rows      int
+
+	minTs *time.Time
+	maxTs *time.Time
 }
 
 func NewStream(maxPageSize uint64, labels string) (*Stream, error) {
@@ -182,6 +185,13 @@ func (s *Stream) Append(ctx context.Context, entries []push.Entry) error {
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return ctx.Err()
+		}
+
+		if s.minTs == nil || entry.Timestamp.Before(*s.minTs) {
+			s.minTs = &entry.Timestamp
+		}
+		if s.maxTs == nil || entry.Timestamp.After(*s.maxTs) {
+			s.maxTs = &entry.Timestamp
 		}
 
 		s.timestamp.Append(s.rows, entry.Timestamp)

@@ -34,4 +34,8 @@ enum SectionType {
 
   // SECTION_TYPE_LOG_STREAMS is a section containing logs broken up by stream.
   SECTION_TYPE_LOG_STREAMS = 1;
+
+  // SECTION_TYPE_STREAMS is a section containing references to streams that
+  // exist within the data object.
+  SECTION_TYPE_STREAMS = 2;
 }
