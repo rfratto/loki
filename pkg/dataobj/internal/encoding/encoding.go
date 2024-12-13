@@ -1,8 +1,8 @@
 // Package encoding defines interfaces shared by other packages that encode
-// data to and from page-level representations within a dataset.
+// binary data to and from data objects.
 //
 // Various encoding formats use these interfaces to provide streaming reads and
-// writes to encoded data. Streaming enables packing as much data as possible
+// writes. Streaming provides benefits such as packing as much data as possible
 // into a single page (post-encoding and post-compression) and minimizing the
 // cost of scanning through a page, at the cost of slightly slower performance.
 //

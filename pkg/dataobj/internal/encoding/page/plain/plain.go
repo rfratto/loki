@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"unsafe"
 
-	encoding "github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/encoding"
+	encoding "github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 )
 
 // Read decodes a string from r.

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"iter"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/encoding"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
 )
 

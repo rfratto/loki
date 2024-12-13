@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/encoding/plain"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/plain"
 	"github.com/stretchr/testify/require"
 )
 
