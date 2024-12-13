@@ -2,6 +2,7 @@ package delta_test
 
 import (
 	"bytes"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -56,8 +57,19 @@ func Benchmark_Encoder_Encode(b *testing.B) {
 		}
 	})
 
-	// Random should test the worst-case scenario where the delta between values
-	// is unpredictable and large.
+	b.Run("Largest delta", func(b *testing.B) {
+		enc := delta.NewEncoder(encoding.Discard)
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if i%2 == 0 {
+				_ = enc.Encode(0)
+			} else {
+				_ = enc.Encode(math.MaxInt64)
+			}
+		}
+	})
+
 	b.Run("Random", func(b *testing.B) {
 		rnd := rand.New(rand.NewSource(0))
 		enc := delta.NewEncoder(encoding.Discard)
@@ -68,7 +80,6 @@ func Benchmark_Encoder_Encode(b *testing.B) {
 			_ = enc.Encode(rnd.Int63())
 		}
 	})
-
 }
 
 func Benchmark_Encoder_Decode(b *testing.B) {
@@ -90,8 +101,28 @@ func Benchmark_Encoder_Decode(b *testing.B) {
 		}
 	})
 
-	// Random should test the worst-case scenario where the delta between values
-	// is unpredictable and large.
+	b.Run("Largest delta", func(b *testing.B) {
+		var buf bytes.Buffer
+
+		var (
+			enc = delta.NewEncoder(&buf)
+			dec = delta.NewDecoder(&buf)
+		)
+
+		for i := 0; i < b.N; i++ {
+			if i%2 == 0 {
+				_ = enc.Encode(0)
+			} else {
+				_ = enc.Encode(math.MaxInt64)
+			}
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = dec.Decode()
+		}
+	})
+
 	b.Run("Random", func(b *testing.B) {
 		rnd := rand.New(rand.NewSource(0))
 
