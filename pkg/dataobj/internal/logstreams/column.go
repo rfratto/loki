@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"iter"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
 )
 
 // Column holds a Column of data for a given RowType. Records are accumulated
@@ -23,7 +23,7 @@ type Column[RowType any] struct {
 	headRows int // headRows tracks the number of rows in the head page.
 
 	pages    []Page
-	pageIter func(s scanner.Scanner, rows int) iter.Seq2[RowType, error]
+	pageIter func(s encoding.Reader, rows int) iter.Seq2[RowType, error]
 	curPage  headPage[RowType]
 }
 
@@ -278,7 +278,7 @@ func headPageSize[RowType any](p headPage[RowType]) int {
 
 func headPageIter[RowType any](
 	p headPage[RowType],
-	iter func(s scanner.Scanner, rows int) iter.Seq2[RowType, error],
+	iter func(s encoding.Reader, rows int) iter.Seq2[RowType, error],
 ) iter.Seq2[RowType, error] {
 
 	curBytes, curRows := p.Data()

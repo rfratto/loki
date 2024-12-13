@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
 )
 
 const (
@@ -215,7 +215,7 @@ func (p *headTextPage) Flush() (Page, error) {
 
 // textPageIter returns an iterator for the provided rows count over text page
 // data read from s.
-func textPageIter(s scanner.Scanner, rows int) iter.Seq2[string, error] {
+func textPageIter(s encoding.Reader, rows int) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		// We iterate over the number of expected rows in the page (rather than
 		// freely fetching entries until EOF) to catch potential encoding errors.
