@@ -1,60 +1,17 @@
-// logstreamsmd.proto holds metadata for the log streams section of a data
-// object. The log streams section contains logs partitioned by stream.
+// datasetmd.proto holds helper types for storing columnar data in a data set.
 syntax = "proto3";
 
-package dataobj.metadata.logstreams.v1;
+package dataobj.metadata.dataset.v1;
 
-option go_package = "github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd";
+option go_package = "github.com/grafana/loki/v3/pkg/dataobj/internal/datasetmd";
 
-// Metadata describes the metadata for the streams section.
-message Metadata {
-  // Streams within the section.
-  repeated StreamInfo streams = 1;
-}
-
-// StreamInfo describes an individual log stream within the streams section.
-message StreamInfo {
-  // Label set representing the stream.
-  StreamIdentifier identifier = 1;
-
-  // Total uncompressed size of the entire stream.
-  uint32 uncompressed_size = 2;
-
-  // Total compressed size of the entire stream. Compressed size may match
-  // uncompressed size if no compression is used.
-  uint32 compressed_size = 3;
-
-  // Byte offset from the start of the data object to the stream's metadata.
-  uint32 metadata_offset = 4;
-
-  // Size of the stream's metadata in bytes.
-  uint32 metadata_size = 5;
-}
-
-// StreamIdentifier represents a stream.
-message StreamIdentifier {
-  message Label {
-    string name = 1;
-    string value = 2;
-  }
-
-  // Set of labels representing the stream.
-  repeated Label labels = 1;
-}
-
-// StreamMetadata describes the metadata for a stream.
-message StreamMetadata {
-  // Columns within the stream.
-  repeated ColumnInfo columns = 1;
-}
-
-// ColumnInfo describes an individual column within a stream.
+// ColumnInfo describes an individual column within a data set.
 message ColumnInfo {
-  // Name of the column; set only for COLUMN_TYPE_METADATA.
+  // Optional name of the column.
   string name = 1;
 
-  // Column type.
-  ColumnType type = 2;
+  // Type of values stored within the column.
+  ValueType value_type = 2;
 
   // Total number of rows in the entire column.
   uint32 rows_count = 3;
@@ -79,19 +36,16 @@ message ColumnInfo {
   Statistics statistics = 9;
 }
 
-// ColumnType represents the valid types that a stream's column can have.
-enum ColumnType {
-  // Invalid column type.
-  COLUMN_TYPE_UNSPECIFIED = 0;
+// ValueType represents the valid types that a stream's column can have.
+enum ValueType {
+  // Invalid value type.
+  VALUE_TYPE_UNSPECIFIED = 0;
 
-  // A column of timestamps of log lines.
-  COLUMN_TYPE_TIMESTAMP = 1;
+  // VALUE_TYPE_TIMESTAMP is a column containing timestamp values.
+  VALUE_TYPE_TIMESTAMP = 1;
 
-  // A column containing structured metadata values for a specific key.
-  COLUMN_TYPE_METADATA = 2;
-
-  // A column containing log lines.
-  COLUMN_TYPE_LOG_LINE = 3;
+  // VALUE_TYPE_TEXT is a column containing text values.
+  VALUE_TYPE_TEXT = 2;
 }
 
 // CompressionType represents the valid compression types that can be used for
@@ -110,23 +64,17 @@ enum CompressionType {
   COMPRESSION_TYPE_ZSTD = 3;
 }
 
-// Statistics about a coulmn or a page. All statistics are optional and are
+// Statistics about a column or a page. All statistics are optional and are
 // conditionally set depending on the column type.
 message Statistics {
-  // Minimum value. Set for COLUMN_TYPE_TIMESTAMP.
+  // Minimum value.
   bytes min_value = 1;
 
-  // Maximum value. Set for COLUMN_TYPE_TIMESTAMP.
+  // Maximum value.
   bytes max_value = 2;
 
-  // A sketch of distinct values. Set for COLUMN_TYPE_METADATA.
+  // A sketch of distinct values.
   uint32 count_distinct_sketch = 3;
-}
-
-// ColumnMetadata describes the metadata for a column.
-message ColumnMetadata {
-  // Pages within the column.
-  repeated PageInfo pages = 1;
 }
 
 // Page describes an individual page within a column.
