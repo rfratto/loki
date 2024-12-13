@@ -29,3 +29,11 @@ type Writer interface {
 	io.Writer
 	io.ByteWriter
 }
+
+// Discard is a [Writer] on which all calls succeed without doing anything.
+var Discard Writer = discard{}
+
+type discard struct{}
+
+func (discard) Write(p []byte) (int, error) { return len(p), nil }
+func (discard) WriteByte(c byte) error      { return nil }

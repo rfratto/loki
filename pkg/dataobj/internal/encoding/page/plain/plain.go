@@ -2,16 +2,16 @@
 package plain
 
 import (
-	uvarint "encoding/binary"
+	"encoding/binary"
 	"fmt"
 	"unsafe"
 
-	encoding "github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 )
 
 // Read decodes a string from r.
 func Read(r encoding.Reader) (string, error) {
-	sz, err := uvarint.ReadUvarint(r)
+	sz, err := binary.ReadUvarint(r)
 	if err != nil {
 		return "", err
 	}
