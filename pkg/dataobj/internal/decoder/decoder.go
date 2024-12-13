@@ -8,8 +8,8 @@ import (
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 // TODO(rfratto): This package was hastily through together just for testing
@@ -34,15 +34,15 @@ type (
 	// StreamsDecoder supports decoding data from a streams section.
 	StreamsDecoder interface {
 		// Streams returns the set of streams from the StreamsDecoder.
-		Streams(ctx context.Context, sec *filemd.SectionInfo) ([]*streamsmd.StreamInfo, error)
+		Streams(ctx context.Context, sec *filemd.SectionInfo) ([]*logstreamsmd.StreamInfo, error)
 
 		// Columns returns the set of columns within a stream.
-		Columns(ctx context.Context, stream *streamsmd.StreamInfo) ([]*streamsmd.ColumnInfo, error)
+		Columns(ctx context.Context, stream *logstreamsmd.StreamInfo) ([]*logstreamsmd.ColumnInfo, error)
 
 		// Pages returns the set of pages within a column.
-		Pages(ctx context.Context, col *streamsmd.ColumnInfo) ([]*streamsmd.PageInfo, error)
+		Pages(ctx context.Context, col *logstreamsmd.ColumnInfo) ([]*logstreamsmd.PageInfo, error)
 
 		// ReadPages reads the pages from the column.
-		ReadPages(ctx context.Context, pages []*streamsmd.PageInfo) iter.Seq2[streams.Page, error]
+		ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[streams.Page, error]
 	}
 )

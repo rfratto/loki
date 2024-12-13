@@ -34,7 +34,7 @@ func Test_newTimeColumn_Iter(t *testing.T) {
 	var expect []time.Time
 
 	for len(col.pages) < 3 {
-		col.Append(col.columnRows+col.headRows, nextTS)
+		col.Append(col.pageRows+col.headRows, nextTS)
 		expect = append(expect, nextTS)
 
 		nextTS = nextTS.Add(time.Duration(r.Intn(5000)) * time.Millisecond)

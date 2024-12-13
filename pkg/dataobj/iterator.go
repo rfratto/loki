@@ -8,17 +8,17 @@ import (
 
 	"github.com/grafana/loki/pkg/push"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 type entryIterator struct {
 	dec    decoder.StreamsDecoder
-	stream *streamsmd.StreamInfo
+	stream *logstreamsmd.StreamInfo
 	opts   EntriesOptions
 }
 
-func newEntryIterator(dec decoder.StreamsDecoder, stream *streamsmd.StreamInfo, opts EntriesOptions) *entryIterator {
+func newEntryIterator(dec decoder.StreamsDecoder, stream *logstreamsmd.StreamInfo, opts EntriesOptions) *entryIterator {
 	return &entryIterator{
 		dec:    dec,
 		stream: stream,
@@ -51,7 +51,7 @@ func (it *entryIterator) Iter() iter.Seq2[push.Entry, error] {
 	}
 }
 
-func lazyTimeIterator(ctx context.Context, dec decoder.StreamsDecoder, col *streamsmd.ColumnInfo, pages []*streamsmd.PageInfo) iter.Seq2[time.Time, error] {
+func lazyTimeIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo, pages []*logstreamsmd.PageInfo) iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		for pageData, err := range dec.ReadPages(ctx, pages) {
 			if err != nil {
@@ -71,7 +71,7 @@ func lazyTimeIterator(ctx context.Context, dec decoder.StreamsDecoder, col *stre
 	}
 }
 
-func lazyTextIterator(ctx context.Context, dec decoder.StreamsDecoder, col *streamsmd.ColumnInfo, pages []*streamsmd.PageInfo) iter.Seq2[time.Time, error] {
+func lazyTextIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo, pages []*logstreamsmd.PageInfo) iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		for pageData, err := range dec.ReadPages(ctx, pages) {
 			if err != nil {

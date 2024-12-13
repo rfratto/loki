@@ -1,4 +1,4 @@
-package streamsmd
+package logstreamsmd
 
 import "github.com/prometheus/prometheus/model/labels"
 

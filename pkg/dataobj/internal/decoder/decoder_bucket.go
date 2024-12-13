@@ -10,8 +10,8 @@ import (
 	"github.com/thanos-io/objstore"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 type bucketDecoder struct {
@@ -88,8 +88,8 @@ type bucketStreamsDecoder struct {
 	path   string
 }
 
-func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec *filemd.SectionInfo) ([]*streamsmd.StreamInfo, error) {
-	if sec.Type != filemd.SECTION_TYPE_STREAMS {
+func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec *filemd.SectionInfo) ([]*logstreamsmd.StreamInfo, error) {
+	if sec.Type != filemd.SECTION_TYPE_LOG_STREAMS {
 		return nil, fmt.Errorf("unsupported section type: %s", sec.Type)
 	}
 
@@ -106,7 +106,7 @@ func (bd *bucketStreamsDecoder) Streams(ctx context.Context, sec *filemd.Section
 	return md.Streams, nil
 }
 
-func (bd *bucketStreamsDecoder) Columns(ctx context.Context, stream *streamsmd.StreamInfo) ([]*streamsmd.ColumnInfo, error) {
+func (bd *bucketStreamsDecoder) Columns(ctx context.Context, stream *logstreamsmd.StreamInfo) ([]*logstreamsmd.ColumnInfo, error) {
 	rc, err := bd.bucket.GetRange(ctx, bd.path, int64(stream.MetadataOffset), int64(stream.MetadataSize))
 	if err != nil {
 		return nil, fmt.Errorf("reading stream metadata: %w", err)
@@ -120,7 +120,7 @@ func (bd *bucketStreamsDecoder) Columns(ctx context.Context, stream *streamsmd.S
 	return md.Columns, nil
 }
 
-func (bd *bucketStreamsDecoder) Pages(ctx context.Context, col *streamsmd.ColumnInfo) ([]*streamsmd.PageInfo, error) {
+func (bd *bucketStreamsDecoder) Pages(ctx context.Context, col *logstreamsmd.ColumnInfo) ([]*logstreamsmd.PageInfo, error) {
 	rc, err := bd.bucket.GetRange(ctx, bd.path, int64(col.MetadataOffset), int64(col.MetadataSize))
 	if err != nil {
 		return nil, fmt.Errorf("reading column metadata: %w", err)
@@ -134,8 +134,8 @@ func (bd *bucketStreamsDecoder) Pages(ctx context.Context, col *streamsmd.Column
 	return md.Pages, nil
 }
 
-func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*streamsmd.PageInfo) iter.Seq2[streams.Page, error] {
-	readPage := func(ctx context.Context, path string, page *streamsmd.PageInfo) (streams.Page, error) {
+func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[streams.Page, error] {
+	readPage := func(ctx context.Context, path string, page *logstreamsmd.PageInfo) (streams.Page, error) {
 		rc, err := bd.bucket.GetRange(ctx, path, int64(page.DataOffset), int64(page.DataSize))
 		if err != nil {
 			return streams.Page{}, err

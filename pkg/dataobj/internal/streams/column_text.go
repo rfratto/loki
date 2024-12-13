@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 const (
@@ -20,13 +20,13 @@ const (
 	// near-comparable read and write performance to snappy.
 	//
 	// https://github.com/facebook/zstd#benchmarks
-	textColumnCompression = streamsmd.COMPRESSION_TYPE_ZSTD
+	textColumnCompression = logstreamsmd.COMPRESSION_TYPE_ZSTD
 )
 
 // IterTextPage returns an iterator over a page of values in a text-based
 // column. IterTextPage yields an error if the column does not contain text or
 // the page could not be read.
-func IterTextPage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[string, error] {
+func IterTextPage(col *logstreamsmd.ColumnInfo, page Page) iter.Seq2[string, error] {
 	return func(yield func(string, error) bool) {
 		if !isTextColumn(col) {
 			yield("", fmt.Errorf("column type %s does not contain text data", col.Type))
@@ -40,7 +40,7 @@ func IterTextPage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[string, error]
 		}
 		defer rc.Close()
 
-		if page.Encoding != streamsmd.ENCODING_PLAIN {
+		if page.Encoding != logstreamsmd.ENCODING_TYPE_PLAIN {
 			yield("", fmt.Errorf("unsupported encoding %s for text column", page.Encoding))
 			return
 		}
@@ -48,8 +48,8 @@ func IterTextPage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[string, error]
 	}
 }
 
-func isTextColumn(col *streamsmd.ColumnInfo) bool {
-	return col.Type == streamsmd.COLUMN_TYPE_LOG_LINE || col.Type == streamsmd.COLUMN_TYPE_METADATA
+func isTextColumn(col *logstreamsmd.ColumnInfo) bool {
+	return col.Type == logstreamsmd.COLUMN_TYPE_LOG_LINE || col.Type == logstreamsmd.COLUMN_TYPE_METADATA
 }
 
 func NewMetadataColumn(name string, maxPageSizeBytes uint64) *Column[string] {
@@ -59,7 +59,7 @@ func NewMetadataColumn(name string, maxPageSizeBytes uint64) *Column[string] {
 
 	return &Column[string]{
 		name:        name,
-		ty:          streamsmd.COLUMN_TYPE_METADATA,
+		ty:          logstreamsmd.COLUMN_TYPE_METADATA,
 		compression: textColumnCompression,
 
 		pageIter: textPageIter,
@@ -78,7 +78,7 @@ func NewLogColumn(maxPageSizeBytes uint64) *Column[string] {
 	targetSize := targetCompressedPageSize(maxPageSizeBytes, textColumnCompression)
 
 	return &Column[string]{
-		ty:          streamsmd.COLUMN_TYPE_LOG_LINE,
+		ty:          logstreamsmd.COLUMN_TYPE_LOG_LINE,
 		compression: textColumnCompression,
 
 		pageIter: textPageIter,
@@ -203,7 +203,7 @@ func (p *headTextPage) Flush() (Page, error) {
 		CRC32:            crc32,
 		RowCount:         p.rows,
 		Compression:      textColumnCompression,
-		Encoding:         streamsmd.ENCODING_PLAIN,
+		Encoding:         logstreamsmd.ENCODING_TYPE_PLAIN,
 		Data:             buf,
 	}
 

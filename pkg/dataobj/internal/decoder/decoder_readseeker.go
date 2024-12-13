@@ -9,8 +9,8 @@ import (
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 type readSeekerDecoder struct {
@@ -53,8 +53,8 @@ type readSeekerStreamsDecoder struct {
 }
 
 // Streams retrieves the set of streams from the provided streams section.
-func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec *filemd.SectionInfo) ([]*streamsmd.StreamInfo, error) {
-	if sec.Type != filemd.SECTION_TYPE_STREAMS {
+func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec *filemd.SectionInfo) ([]*logstreamsmd.StreamInfo, error) {
+	if sec.Type != filemd.SECTION_TYPE_LOG_STREAMS {
 		return nil, fmt.Errorf("section is type %s, not streams", sec.Type)
 	}
 
@@ -71,7 +71,7 @@ func (dec *readSeekerStreamsDecoder) Streams(_ context.Context, sec *filemd.Sect
 }
 
 // Columns retrieves the set of columns from the provided stream.
-func (dec *readSeekerStreamsDecoder) Columns(_ context.Context, stream *streamsmd.StreamInfo) ([]*streamsmd.ColumnInfo, error) {
+func (dec *readSeekerStreamsDecoder) Columns(_ context.Context, stream *logstreamsmd.StreamInfo) ([]*logstreamsmd.ColumnInfo, error) {
 	if _, err := dec.r.Seek(int64(stream.MetadataOffset), io.SeekStart); err != nil {
 		return nil, fmt.Errorf("seek to stream metadata: %w", err)
 	}
@@ -85,7 +85,7 @@ func (dec *readSeekerStreamsDecoder) Columns(_ context.Context, stream *streamsm
 }
 
 // Pages returns an iterator over pages from the provided column.
-func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, col *streamsmd.ColumnInfo) ([]*streamsmd.PageInfo, error) {
+func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, col *logstreamsmd.ColumnInfo) ([]*logstreamsmd.PageInfo, error) {
 	if _, err := dec.r.Seek(int64(col.MetadataOffset), io.SeekStart); err != nil {
 		return nil, fmt.Errorf("seek to column metadata: %w", err)
 	}
@@ -98,8 +98,8 @@ func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, col *streamsmd.Col
 	return md.Pages, nil
 }
 
-func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*streamsmd.PageInfo) iter.Seq2[streams.Page, error] {
-	readPage := func(page *streamsmd.PageInfo) (streams.Page, error) {
+func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[streams.Page, error] {
+	readPage := func(page *logstreamsmd.PageInfo) (streams.Page, error) {
 		if _, err := dec.r.Seek(int64(page.DataOffset), io.SeekStart); err != nil {
 			return streams.Page{}, err
 		}

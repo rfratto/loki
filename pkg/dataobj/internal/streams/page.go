@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/golang/snappy"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -23,9 +23,9 @@ type Page struct {
 	CRC32            uint32 // CRC32 is the CRC32 checksum of the compressed page.
 	RowCount         int    // RowCount is the number of rows in the page.
 
-	Compression streamsmd.CompressionType // Compression used for the compressed page.
-	Encoding    streamsmd.EncodingType    // Encoding used for the decompressed page.
-	Stats       *streamsmd.Statistics     // Optional statistics for the page.
+	Compression logstreamsmd.CompressionType // Compression used for the compressed page.
+	Encoding    logstreamsmd.EncodingType    // Encoding used for the decompressed page.
+	Stats       *logstreamsmd.Statistics     // Optional statistics for the page.
 
 	Data []byte // Data is the compressed and encoded page data.
 }
@@ -38,14 +38,14 @@ func (p *Page) Reader() (io.ReadCloser, error) {
 	}
 
 	switch p.Compression {
-	case streamsmd.COMPRESSION_TYPE_UNSPECIFIED, streamsmd.COMPRESSION_TYPE_NONE:
+	case logstreamsmd.COMPRESSION_TYPE_UNSPECIFIED, logstreamsmd.COMPRESSION_TYPE_NONE:
 		return io.NopCloser(bytes.NewReader(p.Data)), nil
 
-	case streamsmd.COMPRESSION_TYPE_SNAPPY:
+	case logstreamsmd.COMPRESSION_TYPE_SNAPPY:
 		sr := snappy.NewReader(bytes.NewReader(p.Data))
 		return io.NopCloser(sr), nil
 
-	case streamsmd.COMPRESSION_TYPE_ZSTD:
+	case logstreamsmd.COMPRESSION_TYPE_ZSTD:
 		zr, err := zstd.NewReader(bytes.NewReader(p.Data))
 		if err != nil {
 			return nil, fmt.Errorf("creating zstd reader: %w", err)
@@ -59,12 +59,12 @@ func (p *Page) Reader() (io.ReadCloser, error) {
 // compressData compresses buf using the provided compression algorithm and
 // returns the compressed data along with the crc32 checksum of the compressed
 // data.
-func compressData(buf []byte, compression streamsmd.CompressionType) ([]byte, uint32, error) {
+func compressData(buf []byte, compression logstreamsmd.CompressionType) ([]byte, uint32, error) {
 	switch compression {
-	case streamsmd.COMPRESSION_TYPE_UNSPECIFIED, streamsmd.COMPRESSION_TYPE_NONE:
+	case logstreamsmd.COMPRESSION_TYPE_UNSPECIFIED, logstreamsmd.COMPRESSION_TYPE_NONE:
 		return bytes.Clone(buf), crc32.Checksum(buf, checksumTable), nil
 
-	case streamsmd.COMPRESSION_TYPE_SNAPPY:
+	case logstreamsmd.COMPRESSION_TYPE_SNAPPY:
 		compressedBuf := bytes.NewBuffer(nil)
 		sw := snappy.NewBufferedWriter(compressedBuf)
 
@@ -76,7 +76,7 @@ func compressData(buf []byte, compression streamsmd.CompressionType) ([]byte, ui
 		}
 		return compressedBuf.Bytes(), crc32.Checksum(compressedBuf.Bytes(), checksumTable), nil
 
-	case streamsmd.COMPRESSION_TYPE_ZSTD:
+	case logstreamsmd.COMPRESSION_TYPE_ZSTD:
 		// Facebook's benchmarks place the best compression of Zstd as nearly twice
 		// as good as Snappy, while being only very slightly slower.
 		//
@@ -106,9 +106,9 @@ func compressData(buf []byte, compression streamsmd.CompressionType) ([]byte, ui
 // for compression, increasing uncompressedSize by the average compression
 // ratio.
 //
-// If compression is streamsmd.COMPRESSION_NONE, uncompressedSize is returned
+// If compression is logstreamsmd.COMPRESSION_NONE, uncompressedSize is returned
 // unmodified.
-func targetCompressedPageSize(uncompressedSize uint64, compression streamsmd.CompressionType) uint64 {
+func targetCompressedPageSize(uncompressedSize uint64, compression logstreamsmd.CompressionType) uint64 {
 	const (
 		// averageCompressionRatioSnappy is the average compression ratio of Snappy.
 		//
@@ -123,11 +123,11 @@ func targetCompressedPageSize(uncompressedSize uint64, compression streamsmd.Com
 	)
 
 	switch compression {
-	case streamsmd.COMPRESSION_TYPE_UNSPECIFIED, streamsmd.COMPRESSION_TYPE_NONE:
+	case logstreamsmd.COMPRESSION_TYPE_UNSPECIFIED, logstreamsmd.COMPRESSION_TYPE_NONE:
 		return uncompressedSize
-	case streamsmd.COMPRESSION_TYPE_SNAPPY:
+	case logstreamsmd.COMPRESSION_TYPE_SNAPPY:
 		return uint64(float64(uncompressedSize) / averageCompressionRatioSnappy)
-	case streamsmd.COMPRESSION_TYPE_ZSTD:
+	case logstreamsmd.COMPRESSION_TYPE_ZSTD:
 		return uint64(float64(uncompressedSize) / averageCompressionRatioZstd)
 	}
 

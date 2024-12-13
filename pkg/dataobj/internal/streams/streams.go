@@ -11,14 +11,14 @@ import (
 	"time"
 
 	"github.com/grafana/loki/pkg/push"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
 type Stream struct {
 	maxPageSize uint64
-	id          streamsmd.StreamIdentifier
+	id          logstreamsmd.StreamIdentifier
 
 	timestamp *Column[time.Time]
 	metadata  map[string]*Column[string]
@@ -40,13 +40,13 @@ func NewStream(maxPageSize uint64, labels string) (*Stream, error) {
 	}, nil
 }
 
-func labelsToIdentifier(lbls labels.Labels) streamsmd.StreamIdentifier {
-	res := streamsmd.StreamIdentifier{
-		Labels: make([]*streamsmd.StreamIdentifier_Label, 0, len(lbls)),
+func labelsToIdentifier(lbls labels.Labels) logstreamsmd.StreamIdentifier {
+	res := logstreamsmd.StreamIdentifier{
+		Labels: make([]*logstreamsmd.StreamIdentifier_Label, 0, len(lbls)),
 	}
 
 	for _, lbl := range lbls {
-		res.Labels = append(res.Labels, &streamsmd.StreamIdentifier_Label{
+		res.Labels = append(res.Labels, &logstreamsmd.StreamIdentifier_Label{
 			Name:  lbl.Name,
 			Value: lbl.Value,
 		})
@@ -65,7 +65,7 @@ func (s *Stream) CutHead() {
 }
 
 // ID returns the stream's identifier. The returned value must not be modified.
-func (s *Stream) ID() streamsmd.StreamIdentifier { return s.id }
+func (s *Stream) ID() logstreamsmd.StreamIdentifier { return s.id }
 
 func (s *Stream) Iter() iter.Seq2[push.Entry, error] {
 	// Before we iterate, we must backfill all columns to guarantee all columns

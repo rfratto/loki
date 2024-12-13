@@ -9,14 +9,14 @@ import (
 	"iter"
 	"time"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 // IterTimePage returns an iterator over a page of values in a timestamp-based
 // column. IterTextPage yields an error if the column does not contain time or
 // the page could not be read.
-func IterTimePage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[time.Time, error] {
+func IterTimePage(col *logstreamsmd.ColumnInfo, page Page) iter.Seq2[time.Time, error] {
 	return func(yield func(time.Time, error) bool) {
 		var zero time.Time
 
@@ -32,7 +32,7 @@ func IterTimePage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[time.Time, err
 		}
 		defer rc.Close()
 
-		if page.Encoding != streamsmd.ENCODING_DELTA {
+		if page.Encoding != logstreamsmd.ENCODING_TYPE_DELTA {
 			yield(zero, fmt.Errorf("unsupported encoding %s for timestamp column", page.Encoding))
 			return
 		}
@@ -40,15 +40,15 @@ func IterTimePage(col *streamsmd.ColumnInfo, page Page) iter.Seq2[time.Time, err
 	}
 }
 
-func isTimeColumn(col *streamsmd.ColumnInfo) bool {
-	return col.Type == streamsmd.COLUMN_TYPE_TIMESTAMP
+func isTimeColumn(col *logstreamsmd.ColumnInfo) bool {
+	return col.Type == logstreamsmd.COLUMN_TYPE_TIMESTAMP
 }
 
 // NewTimestampColumn creates a new column for storing timestamps.
 func NewTimestampColumn(maxPageSizeBytes uint64) *Column[time.Time] {
 	return &Column[time.Time]{
-		ty:          streamsmd.COLUMN_TYPE_TIMESTAMP,
-		compression: streamsmd.COMPRESSION_TYPE_NONE,
+		ty:          logstreamsmd.COLUMN_TYPE_TIMESTAMP,
+		compression: logstreamsmd.COMPRESSION_TYPE_NONE,
 
 		pageIter: timePageIter,
 		curPage: &headTimePage{
@@ -149,7 +149,7 @@ func (p *headTimePage) Data() ([]byte, int) {
 func (p *headTimePage) Flush() (Page, error) {
 	// No compression is used for timestamps; it's unlikely that compression can
 	// make delta encoding more efficient.
-	buf, crc32, err := compressData(p.buf, streamsmd.COMPRESSION_TYPE_NONE)
+	buf, crc32, err := compressData(p.buf, logstreamsmd.COMPRESSION_TYPE_NONE)
 	if err != nil {
 		return Page{}, fmt.Errorf("compressing text page: %w", err)
 	}
@@ -159,8 +159,8 @@ func (p *headTimePage) Flush() (Page, error) {
 		CompressedSize:   len(buf),
 		CRC32:            crc32,
 		RowCount:         p.rows,
-		Compression:      streamsmd.COMPRESSION_TYPE_NONE,
-		Encoding:         streamsmd.ENCODING_DELTA,
+		Compression:      logstreamsmd.COMPRESSION_TYPE_NONE,
+		Encoding:         logstreamsmd.ENCODING_TYPE_DELTA,
 		Data:             buf,
 	}
 

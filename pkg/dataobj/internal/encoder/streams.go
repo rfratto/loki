@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/streams"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 const (
@@ -22,7 +22,7 @@ type Streams struct {
 	inuse  bool // inuse specifies whether a Stream is currently open.
 
 	data    []byte
-	streams []*streamsmd.StreamInfo
+	streams []*logstreamsmd.StreamInfo
 }
 
 // OpenStream opens a new Stream. OpenStream fails if there is currently
@@ -30,20 +30,20 @@ type Streams struct {
 //
 // If opening a new stream would exceed the maximum metadata size for Streams,
 // OpenStream returns an error.
-func (s *Streams) OpenStream(id streamsmd.StreamIdentifier) (*Stream, error) {
+func (s *Streams) OpenStream(id logstreamsmd.StreamIdentifier) (*Stream, error) {
 	if s.closed {
 		return nil, ErrClosed
 	} else if s.inuse {
 		return nil, ErrElementExist
 	}
 
-	// The streamsmd.Stream entry starts incomplete; we can't know the size of
+	// The logstreamsmd.Stream entry starts incomplete; we can't know the size of
 	// the stream until all columns have been added. While the caller could pass
 	// a size from all in-memory data, that data may not necessarily by written
 	// to the encoder.
 	//
 	// We allow the caller to pass information about its size upwards.
-	s.streams = append(s.streams, &streamsmd.StreamInfo{Identifier: &id})
+	s.streams = append(s.streams, &logstreamsmd.StreamInfo{Identifier: &id})
 
 	s.inuse = true
 	return &Stream{
@@ -64,14 +64,14 @@ func (s *Streams) MetadataSize() int {
 	return len(md)
 }
 
-// buildMetadata builds the set of []streamsmd.Stream to be written as the
+// buildMetadata builds the set of []logstreamsmd.Stream to be written as the
 // metadata section. buildMetadata does not directly check for size limits to
 // avoid unexpected errors from mismatches between the estimated metadata size
 // and the effective size.
 func (s *Streams) buildMetadata() ([]byte, error) {
 	var buf []byte
 
-	md, err := proto.Marshal(&streamsmd.Metadata{Streams: s.streams})
+	md, err := proto.Marshal(&logstreamsmd.Metadata{Streams: s.streams})
 	if err != nil {
 		return nil, EncodingError{err}
 	}
@@ -154,7 +154,7 @@ type Stream struct {
 	inuse  bool // inuse specifies whether a Column is currently open.
 
 	data    []byte
-	columns []*streamsmd.ColumnInfo
+	columns []*logstreamsmd.ColumnInfo
 }
 
 // OpenColumn opens a new column in the stream. OpenColumn fails if there is
@@ -171,7 +171,7 @@ func (s *Stream) OpenColumn(column streams.ColumnInfo) (*Column, error) {
 
 	columnOffset := s.offset + len(s.data)
 
-	s.columns = append(s.columns, &streamsmd.ColumnInfo{
+	s.columns = append(s.columns, &logstreamsmd.ColumnInfo{
 		Name:             column.Name,
 		Type:             column.Type,
 		RowsCount:        uint32(column.RowsCount),
@@ -206,7 +206,7 @@ func (s *Stream) MetadataSize() int {
 func (s *Stream) buildMetadata() ([]byte, error) {
 	var buf []byte
 
-	md, err := proto.Marshal(&streamsmd.StreamMetadata{Columns: s.columns})
+	md, err := proto.Marshal(&logstreamsmd.StreamMetadata{Columns: s.columns})
 	if err != nil {
 		return nil, EncodingError{err}
 	}
@@ -306,7 +306,7 @@ type Column struct {
 	closed bool // closed specifies whether the Column has been closed.
 
 	data  []byte
-	pages []*streamsmd.PageInfo
+	pages []*logstreamsmd.PageInfo
 }
 
 // AppendPage appends a new page to the column. AppendPage fails if the column
@@ -322,7 +322,7 @@ func (c *Column) AppendPage(page streams.Page) error {
 	// It's possible that the caller can provide an incorrect value for
 	// UncompressedSize and CompressedSize, but this doesn't effect
 	// decoding/encoding so we don't check it.
-	c.pages = append(c.pages, &streamsmd.PageInfo{
+	c.pages = append(c.pages, &logstreamsmd.PageInfo{
 		UncompressedSize: uint32(page.UncompressedSize),
 		CompressedSize:   uint32(page.CompressedSize),
 		Crc32:            page.CRC32,
@@ -355,7 +355,7 @@ func (c *Column) MetadataSize() int {
 func (c *Column) buildMetadata() ([]byte, error) {
 	var buf []byte
 
-	md, err := proto.Marshal(&streamsmd.ColumnMetadata{Pages: c.pages})
+	md, err := proto.Marshal(&logstreamsmd.ColumnMetadata{Pages: c.pages})
 	if err != nil {
 		return nil, EncodingError{err}
 	}

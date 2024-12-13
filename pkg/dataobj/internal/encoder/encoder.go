@@ -67,7 +67,7 @@ func (o *Object) OpenStreams() (*Streams, error) {
 
 	// The filemd.SectionInfo entry starts incomplete; we can't know the offset
 	// of the metadata until all data has been written.
-	o.sections = append(o.sections, &filemd.SectionInfo{Type: filemd.SECTION_TYPE_STREAMS})
+	o.sections = append(o.sections, &filemd.SectionInfo{Type: filemd.SECTION_TYPE_LOG_STREAMS})
 
 	o.inuse = true
 	return &Streams{

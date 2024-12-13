@@ -113,7 +113,7 @@ func (b *Builder) Append(ctx context.Context, tenantID string, entries push.Push
 // storage. Calling Flush may result in a no-op if there is no buffered data to
 // flush.
 func (b *Builder) Flush(ctx context.Context) error {
-	if !b.closed.CAS(false, true) {
+	if !b.closed.CompareAndSwap(false, true) {
 		return fmt.Errorf("builder is closed")
 	}
 	return b.flushAllTenants(ctx)

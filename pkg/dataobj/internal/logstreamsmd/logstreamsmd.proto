@@ -1,8 +1,10 @@
+// logstreamsmd.proto holds metadata for the log streams section of a data
+// object. The log streams section contains logs partitioned by stream.
 syntax = "proto3";
 
-package dataobj.metadata.streams.v1;
+package dataobj.metadata.logstreams.v1;
 
-option go_package = "github.com/grafana/loki/pkg/dataobj/internal/streamsmd";
+option go_package = "github.com/grafana/loki/pkg/dataobj/internal/logstreamsmd";
 
 // Metadata describes the metadata for the streams section.
 message Metadata {
@@ -161,12 +163,12 @@ message PageInfo {
 // EncodingType holds various encoding types for data within a page.
 enum EncodingType {
   // Invalid encoding type.
-  ENCODING_UNSPECIFIED = 0;
+  ENCODING_TYPE_UNSPECIFIED = 0;
 
   // Plain encoding; data is stored as-is.
-  ENCODING_PLAIN = 1;
+  ENCODING_TYPE_PLAIN = 1;
 
   // Delta encoding. The first value within the page is stored as-is, and
   // subsequent values are stored as the delta from the previous value.
-  ENCODING_DELTA = 2;
+  ENCODING_TYPE_DELTA = 2;
 }

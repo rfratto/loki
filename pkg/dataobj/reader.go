@@ -13,7 +13,7 @@ import (
 	"github.com/grafana/loki/pkg/push"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 )
 
 var errIterationStopped = errors.New("iteration stopped")
@@ -58,7 +58,7 @@ func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.La
 				return
 			}
 
-			lbls := streamsmd.Labels(stream.Identifier)
+			lbls := logstreamsmd.Labels(stream.Identifier)
 			if !yield(lbls, nil) {
 				return
 			}
@@ -66,10 +66,10 @@ func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.La
 	}
 }
 
-func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[*streamsmd.StreamInfo, error] {
+func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[*logstreamsmd.StreamInfo, error] {
 	dec := decoder.BucketDecoder(r.bucket, object)
 
-	return func(yield func(*streamsmd.StreamInfo, error) bool) {
+	return func(yield func(*logstreamsmd.StreamInfo, error) bool) {
 		sections, err := dec.Sections(ctx)
 		if err != nil {
 			yield(nil, fmt.Errorf("reading sections: %w", err))
@@ -77,7 +77,7 @@ func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[*streamsm
 		}
 
 		for _, sec := range sections {
-			if sec.Type != filemd.SECTION_TYPE_STREAMS {
+			if sec.Type != filemd.SECTION_TYPE_LOG_STREAMS {
 				continue
 			}
 
@@ -135,7 +135,7 @@ func (r *Reader) Entries(ctx context.Context, object string, stream labels.Label
 				return
 			}
 
-			inLabels := streamsmd.Labels(in.Identifier)
+			inLabels := logstreamsmd.Labels(in.Identifier)
 			if !labels.Equal(inLabels, stream) {
 				continue
 			}

@@ -7,8 +7,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/filemd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreamsmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/scanner"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/streamsmd"
 )
 
 // scanTailer scans the tailer of the file to retrieve the metadata size and
@@ -45,7 +45,7 @@ func scanFileMetadata(s scanner.Scanner) (*filemd.Metadata, error) {
 }
 
 // scanStreamsMetadata scans streams section metadata from s.
-func scanStreamsMetadata(s scanner.Scanner) (*streamsmd.Metadata, error) {
+func scanStreamsMetadata(s scanner.Scanner) (*logstreamsmd.Metadata, error) {
 	formatVersion, err := binary.ReadUvarint(s)
 	if err != nil {
 		return nil, fmt.Errorf("read format version: %w", err)
@@ -53,7 +53,7 @@ func scanStreamsMetadata(s scanner.Scanner) (*streamsmd.Metadata, error) {
 		return nil, fmt.Errorf("unsupported streams format version: %d", formatVersion)
 	}
 
-	var metadata streamsmd.Metadata
+	var metadata logstreamsmd.Metadata
 	if err := scanProto(s, &metadata); err != nil {
 		return nil, fmt.Errorf("stream metadata: %w", err)
 	}
@@ -61,8 +61,8 @@ func scanStreamsMetadata(s scanner.Scanner) (*streamsmd.Metadata, error) {
 }
 
 // scanStreamMetadata scans a stream's metadata from s.
-func scanStreamMetadata(s scanner.Scanner) (*streamsmd.StreamMetadata, error) {
-	var metadata streamsmd.StreamMetadata
+func scanStreamMetadata(s scanner.Scanner) (*logstreamsmd.StreamMetadata, error) {
+	var metadata logstreamsmd.StreamMetadata
 	if err := scanProto(s, &metadata); err != nil {
 		return nil, fmt.Errorf("stream metadata: %w", err)
 	}
@@ -70,8 +70,8 @@ func scanStreamMetadata(s scanner.Scanner) (*streamsmd.StreamMetadata, error) {
 }
 
 // scanColumnMetadata scans a column's metadata from s.
-func scanColumnMetadata(s scanner.Scanner) (*streamsmd.ColumnMetadata, error) {
-	var metadata streamsmd.ColumnMetadata
+func scanColumnMetadata(s scanner.Scanner) (*logstreamsmd.ColumnMetadata, error) {
+	var metadata logstreamsmd.ColumnMetadata
 	if err := scanProto(s, &metadata); err != nil {
 		return nil, fmt.Errorf("column metadata: %w", err)
 	}
