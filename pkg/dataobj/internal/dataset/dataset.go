@@ -25,6 +25,7 @@ type Page struct {
 	CRC32            uint32 // CRC32 is the CRC32 checksum of the compressed page.
 	RowCount         int    // RowCount is the number of rows in the page.
 
+	Value       datasetmd.ValueType       // Value type of the page.
 	Compression datasetmd.CompressionType // Compression used for the compressed page.
 	Encoding    datasetmd.EncodingType    // Encoding used for the decompressed page.
 	Stats       *datasetmd.Statistics     // Optional statistics for the page.

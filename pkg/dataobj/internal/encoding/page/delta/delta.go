@@ -2,7 +2,9 @@
 // numbers.
 package delta
 
-import "github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+import (
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+)
 
 // The Encoder encodes delta-encoded numbers. Values are encoded as varint,
 // with each subsequent value being the delta from the previous value.
@@ -21,6 +23,11 @@ func (enc *Encoder) Encode(v int64) error {
 	delta := v - enc.prev
 	enc.prev = v
 	return encoding.WriteVarint(enc.w, delta)
+}
+
+// Reset resets the encoder to its initial state.
+func (enc *Encoder) Reset() {
+	enc.prev = 0
 }
 
 // The Decoder decodes delta-encoded numbers. Values are decoded as varint, with
