@@ -122,4 +122,9 @@ enum EncodingType {
   // Delta encoding. The first value within the page is stored as-is, and
   // subsequent values are stored as the delta from the previous value.
   ENCODING_TYPE_DELTA = 2;
+
+  // Hybrid RLE encoding. Runs of 8 values or more are encoded as RLE, while
+  // shorter runs are merged into a sequence of 8 entries and bitpacked
+  // together.
+  ENCODING_TYPE_HYBRID_RLE = 3;
 }

@@ -4,6 +4,7 @@ package page
 
 import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
 // DataType is a constraint that permits only data types that can be used in a
@@ -19,6 +20,9 @@ type DataType interface {
 // An Encoder encodes values of type T, writing them to an underlying
 // [encoding.Writer].
 type Encoder[T DataType] interface {
+	// Type returns the encoding type supported by the Encoder.
+	Type() datasetmd.EncodingType
+
 	// Encode encodes a value. Encode returns an error if encoded data cannot be
 	// written to the underlying Writer.
 	Encode(v T) error
@@ -36,6 +40,9 @@ type Encoder[T DataType] interface {
 
 // A Decoder decodes values of type T from an underlying [encoding.Reader].
 type Decoder[T DataType] interface {
+	// Type returns the encoding type supported by the Encoder.
+	Type() datasetmd.EncodingType
+
 	// Decode decodes a value. Decode returns an error if the underlying Reader
 	// returns an error or if the data cannot be decoded.
 	Decode() (T, error)

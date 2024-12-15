@@ -5,6 +5,7 @@ package delta
 import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
 // The Encoder encodes delta-encoded int64s. Values are encoded as varint, with
@@ -21,6 +22,11 @@ func NewEncoder(w encoding.Writer) *Encoder {
 	var enc Encoder
 	enc.Reset(w)
 	return &enc
+}
+
+// Type returns [datasetmd.ENCODING_TYPE_DELTA].
+func (enc *Encoder) Type() datasetmd.EncodingType {
+	return datasetmd.ENCODING_TYPE_DELTA
 }
 
 // Encode encodes a new value.
@@ -55,6 +61,11 @@ func NewDecoder(r encoding.Reader) *Decoder {
 	var dec Decoder
 	dec.Reset(r)
 	return &dec
+}
+
+// Type returns [datasetmd.ENCODING_TYPE_DELTA].
+func (dec *Decoder) Type() datasetmd.EncodingType {
+	return datasetmd.ENCODING_TYPE_DELTA
 }
 
 // Decode decodes the next value.

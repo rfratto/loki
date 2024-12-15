@@ -47,6 +47,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
 const maxRunLength uint64 = 1<<63 - 1 // 2^63-1
@@ -91,6 +92,11 @@ func NewEncoder(w encoding.Writer, width int) *Encoder {
 	}
 
 	return &Encoder{w: w, width: width}
+}
+
+// Type returns [datasetmd.ENCODING_TYPE_HYBRID_RLE].
+func (enc *Encoder) Type() datasetmd.EncodingType {
+	return datasetmd.ENCODING_TYPE_HYBRID_RLE
 }
 
 // Encode appends a new value to the encoder. Encode returns an error if the
@@ -363,6 +369,11 @@ func NewDecoder(r encoding.Reader, width int) *Decoder {
 		width: width,
 		set:   make([]byte, width),
 	}
+}
+
+// Type returns [datasetmd.ENCODING_TYPE_HYBRID_RLE].
+func (dec *Decoder) Type() datasetmd.EncodingType {
+	return datasetmd.ENCODING_TYPE_HYBRID_RLE
 }
 
 // Decode reads the next value from the decoder.

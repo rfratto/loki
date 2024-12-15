@@ -7,6 +7,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
 // StringEncoder encodes strings to an [encoding.Writer].
@@ -19,6 +20,11 @@ var _ page.Encoder[string] = (*StringEncoder)(nil)
 // NewStringEncoder creates a StringEncoder that writes encoded strings to w.
 func NewStringEncoder(w encoding.Writer) *StringEncoder {
 	return &StringEncoder{w: w}
+}
+
+// Type returns [datasetmd.ENCODING_TYPE_PLAIN].
+func (enc *StringEncoder) Type() datasetmd.EncodingType {
+	return datasetmd.ENCODING_TYPE_PLAIN
 }
 
 // Encode encodes a string.
@@ -54,6 +60,11 @@ var _ page.Decoder[string] = (*StringDecoder)(nil)
 // NewStringDecoder creates a StringDecoder that reads encoded strings from r.
 func NewStringDecoder(r encoding.Reader) *StringDecoder {
 	return &StringDecoder{r: r}
+}
+
+// Type returns [datasetmd.ENCODING_TYPE_PLAIN].
+func (dec *StringDecoder) Type() datasetmd.EncodingType {
+	return datasetmd.ENCODING_TYPE_PLAIN
 }
 
 // Decode decodes a string.
