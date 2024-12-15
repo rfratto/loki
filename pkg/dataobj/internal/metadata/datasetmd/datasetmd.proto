@@ -41,11 +41,14 @@ enum ValueType {
   // Invalid value type.
   VALUE_TYPE_UNSPECIFIED = 0;
 
-  // VALUE_TYPE_TIMESTAMP is a column containing timestamp values.
-  VALUE_TYPE_TIMESTAMP = 1;
+  // VALUE_TYPE_INT64 is a column containing 64-bit integer values.
+  VALUE_TYPE_INT64 = 1;
 
-  // VALUE_TYPE_TEXT is a column containing text values.
-  VALUE_TYPE_TEXT = 2;
+  // VALUE_TYPE_UINT64 is a column containing 64-bit unsigned integer values.
+  VALUE_TYPE_UINT64 = 2;
+
+  // VALUE_TYPE_STRING is a column containing string values.
+  VALUE_TYPE_STRING = 3;
 }
 
 // CompressionType represents the valid compression types that can be used for

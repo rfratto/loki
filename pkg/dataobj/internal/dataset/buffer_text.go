@@ -17,8 +17,10 @@ type textBuffer struct {
 	nullsBuffer *bytes.Buffer // Stores rle-encoded NULL bitmask.
 	dataBuffer  *bytes.Buffer // Stores encoded + compressed data.
 
-	nullsEnc   *rle.Encoder
 	dataWriter *compresser // Where data is written to.
+
+	nullsEnc *rle.Encoder
+	dataEnc  *plain.StringEncoder
 
 	rows int // Number of rows appended to the textBuffer.
 }
@@ -28,6 +30,8 @@ func TextBuffer(opts BufferOptions) Buffer[string] {
 	var (
 		nullsBuffer = bytes.NewBuffer(nil)
 		dataBuffer  = bytes.NewBuffer(make([]byte, 0, opts.PageSizeHint))
+
+		dataWriter = newCompresser(dataBuffer, opts.Compression)
 	)
 
 	return &textBuffer{
@@ -36,8 +40,10 @@ func TextBuffer(opts BufferOptions) Buffer[string] {
 		nullsBuffer: nullsBuffer,
 		dataBuffer:  dataBuffer,
 
-		nullsEnc:   rle.NewEncoder(nullsBuffer, 1),
-		dataWriter: newCompresser(dataBuffer, opts.Compression),
+		dataWriter: dataWriter,
+
+		nullsEnc: rle.NewEncoder(nullsBuffer, 1),
+		dataEnc:  plain.NewStringEncoder(dataWriter),
 	}
 }
 
@@ -53,7 +59,7 @@ func (b *textBuffer) Append(value string) bool {
 	if err := b.nullsEnc.Encode(1); err != nil {
 		panic(fmt.Sprintf("textBuffer.Append: encoding null bitmask entry: %v", err))
 	}
-	if err := plain.Write(b.dataWriter, value); err != nil {
+	if err := b.dataEnc.Encode(value); err != nil {
 		panic(fmt.Sprintf("textBuffer.Append: encoding value: %v", err))
 	}
 	b.rows++
@@ -123,7 +129,7 @@ func (b *textBuffer) Flush() (Page, error) {
 		CRC32:            checksum,
 		RowCount:         b.rows,
 
-		Value:       datasetmd.VALUE_TYPE_TEXT,
+		Value:       datasetmd.VALUE_TYPE_STRING,
 		Compression: b.opts.Compression,
 		Encoding:    datasetmd.ENCODING_TYPE_PLAIN,
 

@@ -131,7 +131,7 @@ func (b *timeBuffer) Flush() (Page, error) {
 		CRC32:            checksum,
 		RowCount:         b.rows,
 
-		Value:       datasetmd.VALUE_TYPE_TIMESTAMP,
+		Value:       datasetmd.VALUE_TYPE_INT64,
 		Compression: b.opts.Compression,
 		Encoding:    datasetmd.ENCODING_TYPE_DELTA,
 

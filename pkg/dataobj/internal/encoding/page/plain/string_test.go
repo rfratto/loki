@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/plain"
 	"github.com/stretchr/testify/require"
 )
@@ -19,28 +20,32 @@ var testStrings = []string{
 }
 
 func Benchmark_Append(b *testing.B) {
-	buf := bytes.NewBuffer(make([]byte, 0, 1024)) // Large enough to avoid reallocations.
+	enc := plain.NewStringEncoder(encoding.Discard)
 
 	for i := 0; i < b.N; i++ {
-		buf.Reset()
-
 		for _, v := range testStrings {
-			plain.Write(buf, v)
+			_ = enc.Encode(v)
 		}
 	}
 }
 
 func Benchmark_Decode(b *testing.B) {
 	buf := bytes.NewBuffer(make([]byte, 0, 1024)) // Large enough to avoid reallocations.
+
+	var (
+		enc = plain.NewStringEncoder(buf)
+		dec = plain.NewStringDecoder(buf)
+	)
+
 	for _, v := range testStrings {
-		plain.Write(buf, v)
+		enc.Encode(v)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for {
 			var err error
-			_, err = plain.Read(buf)
+			_, err = dec.Decode()
 			if errors.Is(err, io.EOF) {
 				break
 			} else if err != nil {
@@ -52,14 +57,20 @@ func Benchmark_Decode(b *testing.B) {
 
 func Test(t *testing.T) {
 	var buf bytes.Buffer
+
+	var (
+		enc = plain.NewStringEncoder(&buf)
+		dec = plain.NewStringDecoder(&buf)
+	)
+
 	for _, v := range testStrings {
-		plain.Write(&buf, v)
+		require.NoError(t, enc.Encode(v))
 	}
 
 	var out []string
 
 	for {
-		str, err := plain.Read(&buf)
+		str, err := dec.Decode()
 		if errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
