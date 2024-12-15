@@ -13,7 +13,8 @@
 // runs and more closely match the behaviour of parquet-go. The EBNF grammar is
 // as follows:
 //
-//	rle_hybrid         = run+;
+//	rle_hybrid         = bit_width run+;
+//	bit_width          = (* value between 1 and 64, inclusive *)
 //	run                = bit_packed_run | rle_run;
 //	bit_packed_run     = bit_packed_header bit_packed_values;
 //	bit_packed_header  = (* uvarint((bit_packed_run_len / 8) << 1) | 1 *)
@@ -25,6 +26,9 @@
 //	repeated_value     = (* repeated value encoded as varint *)
 //
 // Where this differs from Parquet:
+//
+//   - The first byte holds the width of encoded values to allow for generic
+//     readers who may not know the width in advance. Width is always <=64.
 //
 //   - In Parquet, bit_packed_header includes the run length of bit-packed values
 //     divided by 8 (as each bitpack always holds exactly 8 values at a time).
@@ -54,8 +58,9 @@ const maxRunLength uint64 = 1<<63 - 1 // 2^63-1
 
 // An Encoder encodes int64s to a hybrid run-length encoded format.
 type Encoder struct {
-	w     encoding.Writer
-	width int // Number of bits to use for each value. Must be no greater than 64.
+	w            encoding.Writer
+	width        int  // Number of bits to use for each value. Must be no greater than 64.
+	widthEncoded bool // Whether the width value has been encoded yet.
 
 	// Encoder is a basic state machine with three states:
 	//
@@ -87,10 +92,9 @@ var _ page.Encoder[int64] = (*Encoder)(nil)
 // argument specifies the maximum number of bits to use for each value.
 // NewEncoder panics if width is greater than 64.
 func NewEncoder(w encoding.Writer, width int) *Encoder {
-	if width > 64 {
-		panic("rle: width must be no greater than 64")
+	if width < 1 || width > 64 {
+		panic("rle: width must be in the range 1 and 64, inclusive")
 	}
-
 	return &Encoder{w: w, width: width}
 }
 
@@ -111,6 +115,13 @@ func (enc *Encoder) Type() datasetmd.EncodingType {
 func (enc *Encoder) Encode(v int64) error {
 	if max := enc.maxSize(); v > max {
 		return fmt.Errorf("value %d is too large for width %d", v, enc.width)
+	}
+
+	if !enc.widthEncoded {
+		if err := enc.w.WriteByte(byte(enc.width)); err != nil {
+			return err
+		}
+		enc.widthEncoded = true
 	}
 
 	switch {
@@ -323,6 +334,7 @@ func (enc *Encoder) Reset(w encoding.Writer) {
 	enc.runValue = 0
 	enc.runLength = 0
 	enc.setSize = 0
+	enc.widthEncoded = false
 }
 
 // A Decoder decodes int64s from a hybrid run-length encoded format.
@@ -359,16 +371,8 @@ var _ page.Decoder[int64] = (*Decoder)(nil)
 // NewDecoder creates a Decoder that reads encoded numbers from r. The width
 // argument specifies the maximum number of bits to use for each value.
 // NewDecoder panics if width is greater than 64.
-func NewDecoder(r encoding.Reader, width int) *Decoder {
-	if width > 64 {
-		panic("rle: width must be no greater than 64")
-	}
-
-	return &Decoder{
-		r:     r,
-		width: width,
-		set:   make([]byte, width),
-	}
+func NewDecoder(r encoding.Reader) *Decoder {
+	return &Decoder{r: r}
 }
 
 // Type returns [datasetmd.ENCODING_TYPE_HYBRID_RLE].
@@ -432,6 +436,19 @@ func (dec *Decoder) Decode() (int64, error) {
 }
 
 func (dec *Decoder) readHeader() error {
+	// If width is 0, we haven't read the width yet.
+	if dec.width == 0 {
+		width, err := dec.r.ReadByte()
+		if err != nil {
+			return err
+		}
+		dec.width = int(width)
+		if dec.width < 1 || dec.width > 64 {
+			return fmt.Errorf("rle: invalid width %d", dec.width)
+		}
+		dec.set = make([]byte, dec.width)
+	}
+
 	// Read the next uvarint.
 	header, err := encoding.ReadUvarint(dec.r)
 	if err != nil {
@@ -470,4 +487,6 @@ func (dec *Decoder) Reset(r encoding.Reader) {
 	dec.runValue = 0
 	dec.runLength = 0
 	dec.setSize = 0
+	dec.width = 0
+	dec.set = nil
 }

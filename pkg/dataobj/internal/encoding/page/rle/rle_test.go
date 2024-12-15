@@ -29,7 +29,7 @@ func Fuzz(f *testing.F) {
 
 		var (
 			enc = rle.NewEncoder(&buf, width)
-			dec = rle.NewDecoder(&buf, width)
+			dec = rle.NewDecoder(&buf)
 		)
 
 		var numbers []int64
@@ -124,7 +124,7 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 
 		var (
 			enc = rle.NewEncoder(&buf, width)
-			dec = rle.NewDecoder(&buf, width)
+			dec = rle.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
@@ -143,7 +143,7 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 
 		var (
 			enc = rle.NewEncoder(&buf, width)
-			dec = rle.NewDecoder(&buf, width)
+			dec = rle.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
@@ -163,7 +163,7 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 
 		var (
 			enc = rle.NewEncoder(&buf, width)
-			dec = rle.NewDecoder(&buf, width)
+			dec = rle.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
@@ -198,7 +198,7 @@ func Test_RLE(t *testing.T) {
 
 	var (
 		enc = rle.NewEncoder(&buf, 1)
-		dec = rle.NewDecoder(&buf, 1)
+		dec = rle.NewDecoder(&buf)
 	)
 
 	count := 1500
@@ -221,7 +221,7 @@ func Test_Bitpacking(t *testing.T) {
 
 	var (
 		enc = rle.NewEncoder(&buf, 3)
-		dec = rle.NewDecoder(&buf, 3)
+		dec = rle.NewDecoder(&buf)
 	)
 
 	expect := []int64{0, 1, 2, 3, 4, 5, 6, 7}
@@ -245,7 +245,7 @@ func Test_Bitpacking_Partial(t *testing.T) {
 
 	var (
 		enc = rle.NewEncoder(&buf, 3)
-		dec = rle.NewDecoder(&buf, 3)
+		dec = rle.NewDecoder(&buf)
 	)
 
 	expect := []int64{0, 1, 2, 3, 4}
