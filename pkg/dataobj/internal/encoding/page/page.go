@@ -17,6 +17,20 @@ type DataType interface {
 	int64 | uint64 | string
 }
 
+// MetadataValueType returns the metadata value type for the given data type.
+func MetadataValueType[T DataType]() datasetmd.ValueType {
+	var zero T
+	switch any(zero).(type) {
+	case int64:
+		return datasetmd.VALUE_TYPE_INT64
+	case uint64:
+		return datasetmd.VALUE_TYPE_UINT64
+	case string:
+		return datasetmd.VALUE_TYPE_STRING
+	}
+	panic("MetadataValueType: unrecognized type")
+}
+
 // An Encoder encodes values of type T, writing them to an underlying
 // [encoding.Writer].
 type Encoder[T DataType] interface {
