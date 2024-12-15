@@ -28,8 +28,9 @@ type Encoder[T DataType] interface {
 	// an error.
 	Flush() error
 
-	// Reset discards any state and switches the Encoder to write to w. This
-	// permits reusing a Writer rather than allocating a new one.
+	// Reset discards any state without flushing and switches the Encoder to
+	// write to w. This permits reusing a Writer rather than allocating a new
+	// one.
 	Reset(w encoding.Writer)
 }
 
@@ -39,7 +40,7 @@ type Decoder[T DataType] interface {
 	// returns an error or if the data cannot be decoded.
 	Decode() (T, error)
 
-	// Reset discards any state and switches the Decoder to read from r. This permits
-	// reusing a Reader rather than allocating a new one.
+	// Reset discards any state and switches the Decoder to read from r. This
+	// permits reusing a Reader rather than allocating a new one.
 	Reset(r encoding.Reader)
 }

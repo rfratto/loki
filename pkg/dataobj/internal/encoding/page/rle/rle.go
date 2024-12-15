@@ -46,10 +46,12 @@ import (
 	"math"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 )
 
 const maxRunLength uint64 = 1<<63 - 1 // 2^63-1
 
+// An Encoder encodes int64s to a hybrid run-length encoded format.
 type Encoder struct {
 	w     encoding.Writer
 	width int // Number of bits to use for each value. Must be no greater than 64.
@@ -77,6 +79,8 @@ type Encoder struct {
 	set     [8]int64 // Set of bit-packed values.
 	setSize byte     // Current number of elements in set.
 }
+
+var _ page.Encoder[int64] = (*Encoder)(nil)
 
 // NewEncoder creates an Encoder that writes encoded numbers to w. The width
 // argument specifies the maximum number of bits to use for each value.
@@ -307,12 +311,15 @@ func (enc *Encoder) flushRLE() error {
 	}
 }
 
-// TODO(rfratto): It would be easier to write the decoder as an iterator to
-// keep track of various state, as long as the iterator is told the number of
-// values to pull in total.
-//
-// Maybe we can change the APIs of decoders to always be iterators?
+// Reset resets the encoder to write to w.
+func (enc *Encoder) Reset(w encoding.Writer) {
+	enc.w = w
+	enc.runValue = 0
+	enc.runLength = 0
+	enc.setSize = 0
+}
 
+// A Decoder decodes int64s from a hybrid run-length encoded format.
 type Decoder struct {
 	r     encoding.Reader
 	width int // Number of bits to use for each value. Must be no greater than 64.
@@ -340,6 +347,8 @@ type Decoder struct {
 	set     []byte // Bit-packed values.
 	setSize byte   // Number of values left in the current bit-packed set.
 }
+
+var _ page.Decoder[int64] = (*Decoder)(nil)
 
 // NewDecoder creates a Decoder that reads encoded numbers from r. The width
 // argument specifies the maximum number of bits to use for each value.
@@ -442,4 +451,12 @@ func (dec *Decoder) readHeader() error {
 	}
 
 	return nil
+}
+
+// Reset resets the decoder to read from r.
+func (dec *Decoder) Reset(r encoding.Reader) {
+	dec.r = r
+	dec.runValue = 0
+	dec.runLength = 0
+	dec.setSize = 0
 }
