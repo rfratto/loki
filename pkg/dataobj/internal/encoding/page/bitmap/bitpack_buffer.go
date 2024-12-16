@@ -1,4 +1,4 @@
-package rle
+package bitmap
 
 import (
 	"errors"

@@ -1,4 +1,4 @@
-package rle_test
+package bitmap_test
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/rle"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,8 +28,8 @@ func Fuzz(f *testing.F) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf)
-			dec = rle.NewDecoder(&buf)
+			enc = bitmap.NewEncoder(&buf)
+			dec = bitmap.NewDecoder(&buf)
 		)
 
 		var numbers []uint64
@@ -68,7 +68,7 @@ func Benchmark_Encoder_Encode(b *testing.B) {
 func benchmark_Encoder_Encode(b *testing.B, width int) {
 	b.Run("variance=none", func(b *testing.B) {
 		var cw countingWriter
-		enc := rle.NewEncoder(&cw)
+		enc := bitmap.NewEncoder(&cw)
 
 		b.ResetTimer()
 
@@ -82,7 +82,7 @@ func benchmark_Encoder_Encode(b *testing.B, width int) {
 
 	b.Run("variance=alternating", func(b *testing.B) {
 		var cw countingWriter
-		enc := rle.NewEncoder(&cw)
+		enc := bitmap.NewEncoder(&cw)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -97,7 +97,7 @@ func benchmark_Encoder_Encode(b *testing.B, width int) {
 		rnd := rand.New(rand.NewSource(0))
 
 		var cw countingWriter
-		enc := rle.NewEncoder(&cw)
+		enc := bitmap.NewEncoder(&cw)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -123,8 +123,8 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf)
-			dec = rle.NewDecoder(&buf)
+			enc = bitmap.NewEncoder(&buf)
+			dec = bitmap.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
@@ -142,8 +142,8 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf)
-			dec = rle.NewDecoder(&buf)
+			enc = bitmap.NewEncoder(&buf)
+			dec = bitmap.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
@@ -162,8 +162,8 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf)
-			dec = rle.NewDecoder(&buf)
+			enc = bitmap.NewEncoder(&buf)
+			dec = bitmap.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
@@ -193,12 +193,12 @@ func (w *countingWriter) WriteByte(c byte) error {
 	return nil
 }
 
-func Test_RLE(t *testing.T) {
+func Test(t *testing.T) {
 	var buf bytes.Buffer
 
 	var (
-		enc = rle.NewEncoder(&buf)
-		dec = rle.NewDecoder(&buf)
+		enc = bitmap.NewEncoder(&buf)
+		dec = bitmap.NewDecoder(&buf)
 	)
 
 	count := 1500
@@ -220,8 +220,8 @@ func Test_Bitpacking(t *testing.T) {
 	var buf bytes.Buffer
 
 	var (
-		enc = rle.NewEncoder(&buf)
-		dec = rle.NewDecoder(&buf)
+		enc = bitmap.NewEncoder(&buf)
+		dec = bitmap.NewDecoder(&buf)
 	)
 
 	expect := []uint64{0, 1, 2, 3, 4, 5, 6, 7}
@@ -245,8 +245,8 @@ func Test_Bitpacking_Partial(t *testing.T) {
 	var buf bytes.Buffer
 
 	var (
-		enc = rle.NewEncoder(&buf)
-		dec = rle.NewDecoder(&buf)
+		enc = bitmap.NewEncoder(&buf)
+		dec = bitmap.NewDecoder(&buf)
 	)
 
 	expect := []uint64{0, 1, 2, 3, 4}

@@ -1,4 +1,4 @@
-// Package rle encodes and decodes a hybrid run-length encoding format for
+// Package bitmap encodes and decodes a hybrid run-length encoding format for
 // unsigned numbers up to 64 bits wide.
 //
 // A sequence of values is encoded as a series of runs. A run is either
@@ -10,15 +10,15 @@
 // width to use for the set. The bit width can be any value from 1 to 64,
 // inclusive. One bitpacked run contains one or more sets of the same width.
 //
-// To use rle with signed integers, it is recommended to use zig-zag encoding
-// to minimize the number of bits needed for negative values.
+// To use bitmap with signed integers, it is recommended to use zig-zag
+// encoding to minimize the number of bits needed for negative values.
 //
 // # Format
 //
 // Our format is a slight modification of the Parquet format to support longer
 // runs and support streaming. The EBNF grammar is as follows:
 //
-//	rle_hybrid         = run+;
+//	bitmap             = run+;
 //	run                = bit_packed_run | rle_run;
 //	bit_packed_run     = bit_packed_header bit_packed_values;
 //	bit_packed_header  = (* uvarint(bit_packed_sets << 7 | bit_width << 1 | 1) *)
@@ -47,7 +47,7 @@
 //     written. Callers may choose to prepend the length. Without the length,
 //     readers must take caution to not read past the end of the RLE sequence
 //     by knowing exactly how many values were encoded.
-package rle
+package bitmap
 
 import (
 	"fmt"
@@ -100,9 +100,9 @@ func NewEncoder(w encoding.Writer) *Encoder {
 	}
 }
 
-// Type returns [datasetmd.ENCODING_TYPE_HYBRID_RLE].
+// Type returns [datasetmd.ENCODING_TYPE_BITMAP].
 func (enc *Encoder) Type() datasetmd.EncodingType {
-	return datasetmd.ENCODING_TYPE_HYBRID_RLE
+	return datasetmd.ENCODING_TYPE_BITMAP
 }
 
 // Encode appends a new value to the encoder. Values are buffered in memory up
@@ -390,9 +390,9 @@ func NewDecoder(r encoding.Reader) *Decoder {
 	return &Decoder{r: r}
 }
 
-// Type returns [datasetmd.ENCODING_TYPE_HYBRID_RLE].
+// Type returns [datasetmd.ENCODING_TYPE_BITMAP].
 func (dec *Decoder) Type() datasetmd.EncodingType {
-	return datasetmd.ENCODING_TYPE_HYBRID_RLE
+	return datasetmd.ENCODING_TYPE_BITMAP
 }
 
 // Decode reads the next value from the decoder.

@@ -7,7 +7,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/rle"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
@@ -51,7 +51,7 @@ type Buffer[RowType page.DataType] struct {
 
 	valuesWriter *compresser // Compresses data and writes to valuesBuffer.
 
-	presenceEnc *rle.Encoder
+	presenceEnc *bitmap.Encoder
 	valuesEnc   page.Encoder[RowType]
 
 	rows int // Number of rows appended to the Buffer.
@@ -76,7 +76,7 @@ func NewBuffer[RowType page.DataType](opts BufferOptions, newEnc NewEncoderFunc[
 
 		valuesWriter: valuesWriter,
 
-		presenceEnc: rle.NewEncoder(presenceBuffer),
+		presenceEnc: bitmap.NewEncoder(presenceBuffer),
 		valuesEnc:   newEnc(valuesWriter),
 	}
 }
