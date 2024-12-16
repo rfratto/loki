@@ -1,17 +1,16 @@
-// Package bitmap encodes and decodes a hybrid run-length encoding format for
-// unsigned numbers up to 64 bits wide.
+// Package bitmap encodes and decodes bitmaps of unsigned numbers up to 64 bits
+// wide. To use bitmap with signed integers, callers should first encode the
+// integers using zig-zag encoding to minimize the number of bits needed for
+// negative values.
 //
-// A sequence of values is encoded as a series of runs. A run is either
-// length-encoded (run-length encoding) or bitpacked. Run-length encoding is
-// used when there is a repeating sequence of the same value 8 or more times.
-// Otherwise, the values are bitpacked into sets of 8 values each.
+// Data is encoded with a hybrid of run-length encoding and bitpacking. Longer
+// sequences of the same value are encoded with run-length encoding, while
+// shorter sequences are bitpacked when possible. To avoid padding, bitpacking
+// is only used when there are a multiple of 8 values to encode.
 //
-// When bitpacking, the largest value in the set of 8 values determines the bit
-// width to use for the set. The bit width can be any value from 1 to 64,
-// inclusive. One bitpacked run contains one or more sets of the same width.
-//
-// To use bitmap with signed integers, it is recommended to use zig-zag
-// encoding to minimize the number of bits needed for negative values.
+// Bitpacking is done using a dynamic bit width. The bit width is determined by
+// the largest value in the set of 8 values. The bit width can be any value
+// from 1 to 64, inclusive.
 //
 // # Format
 //
