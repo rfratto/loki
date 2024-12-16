@@ -28,24 +28,24 @@ func Fuzz(f *testing.F) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf, width)
+			enc = rle.NewEncoder(&buf)
 			dec = rle.NewDecoder(&buf)
 		)
 
-		var numbers []int64
+		var numbers []uint64
 		for i := 0; i < count; i++ {
-			var mask int64 = math.MaxInt64
+			var mask uint64 = math.MaxUint64
 			if width < 64 {
 				mask = (1 << width) - 1
 			}
 
-			v := rnd.Int63() & mask
+			v := uint64(rnd.Int63()) & mask
 			numbers = append(numbers, v)
 			require.NoError(t, enc.Encode(v))
 		}
 		require.NoError(t, enc.Flush())
 
-		var actual []int64
+		var actual []uint64
 		for i := 0; i < count; i++ {
 			v, err := dec.Decode()
 			require.NoError(t, err)
@@ -68,7 +68,7 @@ func Benchmark_Encoder_Encode(b *testing.B) {
 func benchmark_Encoder_Encode(b *testing.B, width int) {
 	b.Run("variance=none", func(b *testing.B) {
 		var cw countingWriter
-		enc := rle.NewEncoder(&cw, width)
+		enc := rle.NewEncoder(&cw)
 
 		b.ResetTimer()
 
@@ -82,11 +82,11 @@ func benchmark_Encoder_Encode(b *testing.B, width int) {
 
 	b.Run("variance=alternating", func(b *testing.B) {
 		var cw countingWriter
-		enc := rle.NewEncoder(&cw, width)
+		enc := rle.NewEncoder(&cw)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(int64(i % width))
+			_ = enc.Encode(uint64(i % width))
 		}
 		_ = enc.Flush()
 
@@ -97,11 +97,11 @@ func benchmark_Encoder_Encode(b *testing.B, width int) {
 		rnd := rand.New(rand.NewSource(0))
 
 		var cw countingWriter
-		enc := rle.NewEncoder(&cw, width)
+		enc := rle.NewEncoder(&cw)
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(rnd.Int63() % int64(width))
+			_ = enc.Encode(uint64(rnd.Int63()) % uint64(width))
 		}
 		_ = enc.Flush()
 
@@ -123,7 +123,7 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf, width)
+			enc = rle.NewEncoder(&buf)
 			dec = rle.NewDecoder(&buf)
 		)
 
@@ -142,12 +142,12 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf, width)
+			enc = rle.NewEncoder(&buf)
 			dec = rle.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(int64(i % width))
+			_ = enc.Encode(uint64(i % width))
 		}
 		_ = enc.Flush()
 
@@ -162,12 +162,12 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		var buf bytes.Buffer
 
 		var (
-			enc = rle.NewEncoder(&buf, width)
+			enc = rle.NewEncoder(&buf)
 			dec = rle.NewDecoder(&buf)
 		)
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(rnd.Int63() % int64(width))
+			_ = enc.Encode(uint64(rnd.Int63()) % uint64(width))
 		}
 		_ = enc.Flush()
 
@@ -197,13 +197,13 @@ func Test_RLE(t *testing.T) {
 	var buf bytes.Buffer
 
 	var (
-		enc = rle.NewEncoder(&buf, 1)
+		enc = rle.NewEncoder(&buf)
 		dec = rle.NewDecoder(&buf)
 	)
 
 	count := 1500
 	for i := 0; i < count; i++ {
-		require.NoError(t, enc.Encode(int64(1)))
+		require.NoError(t, enc.Encode(uint64(1)))
 	}
 	require.NoError(t, enc.Flush())
 
@@ -212,7 +212,7 @@ func Test_RLE(t *testing.T) {
 	for range count {
 		v, err := dec.Decode()
 		require.NoError(t, err)
-		require.Equal(t, int64(1), v)
+		require.Equal(t, uint64(1), v)
 	}
 }
 
@@ -220,16 +220,17 @@ func Test_Bitpacking(t *testing.T) {
 	var buf bytes.Buffer
 
 	var (
-		enc = rle.NewEncoder(&buf, 3)
+		enc = rle.NewEncoder(&buf)
 		dec = rle.NewDecoder(&buf)
 	)
 
-	expect := []int64{0, 1, 2, 3, 4, 5, 6, 7}
+	expect := []uint64{0, 1, 2, 3, 4, 5, 6, 7}
 	for _, v := range expect {
 		require.NoError(t, enc.Encode(v))
 	}
+	require.NoError(t, enc.Flush())
 
-	var actual []int64
+	var actual []uint64
 	for range len(expect) {
 		v, err := dec.Decode()
 		require.NoError(t, err)
@@ -244,17 +245,17 @@ func Test_Bitpacking_Partial(t *testing.T) {
 	var buf bytes.Buffer
 
 	var (
-		enc = rle.NewEncoder(&buf, 3)
+		enc = rle.NewEncoder(&buf)
 		dec = rle.NewDecoder(&buf)
 	)
 
-	expect := []int64{0, 1, 2, 3, 4}
+	expect := []uint64{0, 1, 2, 3, 4}
 	for _, v := range expect {
 		require.NoError(t, enc.Encode(v))
 	}
 	require.NoError(t, enc.Flush())
 
-	var actual []int64
+	var actual []uint64
 	for range len(expect) {
 		v, err := dec.Decode()
 		require.NoError(t, err)

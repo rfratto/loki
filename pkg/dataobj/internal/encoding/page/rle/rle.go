@@ -1,43 +1,47 @@
 // Package rle encodes and decodes a hybrid run-length encoding format for
-// numbers up to 64 bits wide.
+// unsigned numbers up to 64 bits wide.
 //
-// A set of values is either run-length encoded or bit-packed. Run-length
-// encoding is used for runs of 8 or more values. Shorter runs are accumulated
-// into a set of 8 values and are bit-packed, combining multiple smaller runs
-// together. If encoding ends before accumulating 8 values to bit-pack, the
-// remaining values are run-length encoded.
+// A sequence of values is encoded as a series of runs. A run is either
+// length-encoded (run-length encoding) or bitpacked. Run-length encoding is
+// used when there is a repeating sequence of the same value 8 or more times.
+// Otherwise, the values are bitpacked into sets of 8 values each.
+//
+// When bitpacking, the largest value in the set of 8 values determines the bit
+// width to use for the set. The bit width can be any value from 1 to 64,
+// inclusive. One bitpacked run contains one or more sets of the same width.
+//
+// To use rle with signed integers, it is recommended to use zig-zag encoding
+// to minimize the number of bits needed for negative values.
 //
 // # Format
 //
 // Our format is a slight modification of the Parquet format to support longer
-// runs and more closely match the behaviour of parquet-go. The EBNF grammar is
-// as follows:
+// runs and support streaming. The EBNF grammar is as follows:
 //
-//	rle_hybrid         = bit_width run+;
-//	bit_width          = (* value between 1 and 64, inclusive *)
+//	rle_hybrid         = run+;
 //	run                = bit_packed_run | rle_run;
 //	bit_packed_run     = bit_packed_header bit_packed_values;
-//	bit_packed_header  = (* uvarint((bit_packed_run_len / 8) << 1) | 1 *)
-//	bit_packed_run_len = (* 8 *)
+//	bit_packed_header  = (* uvarint(bit_packed_sets << 7 | bit_width << 1 | 1) *)
+//	bit_packed_sets    = (* value between 1 and 2^57-1, inclusive; each set has 8 elements *)
+//	bit_width          = (* bit size of element in set; value between 1 and 64, inclusive *)
 //	bit_packed_values  = (* least significant bit of each byte to most significant bit of each byte *)
 //	rle_run            = rle_header repeated_value;
 //	rle_header         = (* uvarint(rle_run_len << 1) *)
 //	rle_run_len        = (* value between 1 and 2^63-1, inclusive *)
-//	repeated_value     = (* repeated value encoded as varint *)
+//	repeated_value     = (* repeated value encoded as uvarint *)
 //
 // Where this differs from Parquet:
 //
-//   - The first byte holds the width of encoded values to allow for generic
-//     readers who may not know the width in advance. Width is always <=64.
+//   - We don't use a fixed width for bit-packed values, to allow for stream
+//     calls to Encode without knowing the width in advance. Instead, the width
+//     is determined when flushing a bit-packed set to an internal buffer.
 //
-//   - In Parquet, bit_packed_header includes the run length of bit-packed values
-//     divided by 8 (as each bitpack always holds exactly 8 values at a time).
-//     However, as we write our encoders for streaming, we only encode one run of
-//     bitpacked values at a time. This means our bit_packed_header is always
-//     0b11, at the cost of one extra byte per bitpacked run.
+//     To minimize the overhead of encoding the width dynamically, we store
+//     each bitpacked set with the smallest amount of bits possible. If two
+//     sets have different widths, they are flushed as two different runs.
 //
-//   - For simplicity, repeated_value is encoded as varint rather than flushing
-//     the value in its entirety.
+//   - For simplicity, repeated_value is encoded as uvarint rather than
+//     flushing the value in its entirety.
 //
 //   - To facilitate streaming, we don't prepend the length of all bytes
 //     written. Callers may choose to prepend the length. Without the length,
@@ -47,7 +51,7 @@ package rle
 
 import (
 	"fmt"
-	"math"
+	"math/bits"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
@@ -56,11 +60,9 @@ import (
 
 const maxRunLength uint64 = 1<<63 - 1 // 2^63-1
 
-// An Encoder encodes int64s to a hybrid run-length encoded format.
+// An Encoder encodes uint64s to a hybrid run-length encoded format.
 type Encoder struct {
-	w            encoding.Writer
-	width        int  // Number of bits to use for each value. Must be no greater than 64.
-	widthEncoded bool // Whether the width value has been encoded yet.
+	w encoding.Writer
 
 	// Encoder is a basic state machine with three states:
 	//
@@ -79,23 +81,23 @@ type Encoder struct {
 	//          setSize>0. Once the set reaches 8 values, the run is flushed and
 	//					the encoder moves to READY.
 
-	runValue  int64  // Value in the current run.
+	runValue  uint64 // Value in the current run.
 	runLength uint64 // Length of the current run.
 
-	set     [8]int64 // Set of bit-packed values.
-	setSize byte     // Current number of elements in set.
+	set     [8]uint64 // Set of bit-packed values.
+	setSize byte      // Current number of elements in set.
+
+	buf *bitpackBuffer
 }
 
-var _ page.Encoder[int64] = (*Encoder)(nil)
+var _ page.Encoder[uint64] = (*Encoder)(nil)
 
-// NewEncoder creates an Encoder that writes encoded numbers to w. The width
-// argument specifies the maximum number of bits to use for each value.
-// NewEncoder panics if width is greater than 64.
-func NewEncoder(w encoding.Writer, width int) *Encoder {
-	if width < 1 || width > 64 {
-		panic("rle: width must be in the range 1 and 64, inclusive")
+// NewEncoder creates an Encoder that writes encoded numbers to w.
+func NewEncoder(w encoding.Writer) *Encoder {
+	return &Encoder{
+		w:   w,
+		buf: newBitpackBuffer(),
 	}
-	return &Encoder{w: w, width: width}
 }
 
 // Type returns [datasetmd.ENCODING_TYPE_HYBRID_RLE].
@@ -103,27 +105,14 @@ func (enc *Encoder) Type() datasetmd.EncodingType {
 	return datasetmd.ENCODING_TYPE_HYBRID_RLE
 }
 
-// Encode appends a new value to the encoder. Encode returns an error if the
-// provided value is too large to fit in the specified width, or if flushing to
-// the underlying writer fails.
+// Encode appends a new value to the encoder. Values are buffered in memory up
+// to a maximum of 4KiB.
 //
-// Runs are accumulated into memory until the run ends. Runs longer than 7
-// values are immediately flushed. Shorter runs are converted to bitpacking and
-// flushed once there are 8 values.
+// When flushing, Encode returns an error if writing to the underlying Writer
+// fails.
 //
 // Call [Encoder.Flush] to end the run and flush any remaining values.
-func (enc *Encoder) Encode(v int64) error {
-	if max := enc.maxSize(); v > max {
-		return fmt.Errorf("value %d is too large for width %d", v, enc.width)
-	}
-
-	if !enc.widthEncoded {
-		if err := enc.w.WriteByte(byte(enc.width)); err != nil {
-			return err
-		}
-		enc.widthEncoded = true
-	}
-
+func (enc *Encoder) Encode(v uint64) error {
 	switch {
 	case enc.runLength == 0 && enc.setSize == 0: // Start a new run.
 		enc.runValue = v
@@ -184,13 +173,6 @@ func (enc *Encoder) Encode(v int64) error {
 	}
 }
 
-func (enc *Encoder) maxSize() int64 {
-	if enc.width == 64 {
-		return math.MaxInt64
-	}
-	return (1 << enc.width) - 1
-}
-
 // Flush writes any remaining values to the underlying writer.
 func (enc *Encoder) Flush() error {
 	// We always flush using RLE. If we were in the middle of bitpacking, we
@@ -199,14 +181,20 @@ func (enc *Encoder) Flush() error {
 	return enc.flushRLE()
 }
 
+// flushBitPacked flushes the current bit-packed set to a buffer for
+// accumulating runs. If the buffer is full, we flush the buffer immediately to
+// the underlying writer.
 func (enc *Encoder) flushBitPacked() error {
 	if enc.setSize != 8 {
 		panic("rle: flushBitPacked called with less than 8 values")
 	}
 
-	// Write the bit-packed header. (0b11)
-	if err := enc.w.WriteByte(1<<1 | 1); err != nil {
-		return err
+	// Detect width.
+	var width int
+	for i := 0; i < int(enc.setSize); i++ {
+		if bitLength := bits.Len64(enc.set[i]); bitLength > width {
+			width = bitLength
+		}
 	}
 
 	// Write out the bit-packed values. Bitpacking 8 values of bit width N always
@@ -220,7 +208,7 @@ func (enc *Encoder) flushBitPacked() error {
 	// (rfratto) found it easier when considering how output bits map to the
 	// input bits.
 	//
-	// This means that for enc.width == 3:
+	// This means that for width == 3:
 	//
 	//   index:     0   1   2   3   4   5   6   7
 	//   dec value: 0   1   2   3   4   5   6   7
@@ -251,13 +239,15 @@ func (enc *Encoder) flushBitPacked() error {
 	//
 	// If there's a much simpler way to understand and do this packing, I'd love
 	// to know.
-	for outputByte := 0; outputByte < enc.width; outputByte++ {
+	buf := make([]byte, 0, width)
+
+	for outputByte := 0; outputByte < width; outputByte++ {
 		var b byte
 
 		for i := 0; i < 8; i++ {
 			outputBit := outputByte*8 + i
-			inputIndex := outputBit / enc.width
-			inputBit := outputBit % enc.width
+			inputIndex := outputBit / width
+			inputBit := outputBit % width
 
 			// Set the bit in the byte.
 			if enc.set[inputIndex]&(1<<inputBit) != 0 {
@@ -265,7 +255,21 @@ func (enc *Encoder) flushBitPacked() error {
 			}
 		}
 
-		if err := enc.w.WriteByte(b); err != nil {
+		buf = append(buf, b)
+	}
+
+	// Append the set to our buffer. It can only fail in two scenarios:
+	//
+	// 1. The width changed.
+	// 2. The buffer is full.
+	//
+	// In either case, we want to flush and try again.
+	for range 2 {
+		if err := enc.buf.AppendSet(width, buf); err == nil {
+			break
+		}
+
+		if err := enc.buf.Flush(enc.w); err != nil {
 			return err
 		}
 	}
@@ -275,16 +279,21 @@ func (enc *Encoder) flushBitPacked() error {
 }
 
 func (enc *Encoder) flushRLE() error {
+	// Flush anything in the bitpack buffer.
+	if err := enc.buf.Flush(enc.w); err != nil {
+		return err
+	}
+
 	switch {
 	case enc.runLength > 0:
 		if enc.runLength > maxRunLength {
 			return fmt.Errorf("run length too large")
 		}
 
-		if err := encoding.WriteUvarint(enc.w, uint64(enc.runLength<<1)); err != nil {
+		if err := encoding.WriteUvarint(enc.w, enc.runLength<<1); err != nil {
 			return err
 		}
-		if err := encoding.WriteVarint(enc.w, enc.runValue); err != nil {
+		if err := encoding.WriteUvarint(enc.w, enc.runValue); err != nil {
 			return err
 		}
 
@@ -315,7 +324,7 @@ func (enc *Encoder) flushRLE() error {
 			}
 
 			// Value.
-			if err := encoding.WriteVarint(enc.w, val); err != nil {
+			if err := encoding.WriteUvarint(enc.w, val); err != nil {
 				return err
 			}
 		}
@@ -334,39 +343,45 @@ func (enc *Encoder) Reset(w encoding.Writer) {
 	enc.runValue = 0
 	enc.runLength = 0
 	enc.setSize = 0
-	enc.widthEncoded = false
+	enc.buf.Reset()
 }
 
 // A Decoder decodes int64s from a hybrid run-length encoded format.
 type Decoder struct {
-	r     encoding.Reader
-	width int // Number of bits to use for each value. Must be no greater than 64.
+	r encoding.Reader
 
-	// Like [Encoder], Decoder is a basic state machine with three states:
+	// Like [Encoder], Decoder is a basic state machine with four states:
 	//
-	// READY    The default state; it needs to pull a new run header and change
-	//          states.
+	// READY          The default state; it needs to pull a new run header and
+	//                change states.
 	//
-	// RLE      The decoder is in the middle of a RLE-encoded run. Active when
-	//          runLength>0. runLength decreases by one each time Decode is
-	//          called, and runValue is returned.
+	// RLE            The decoder is in the middle of a RLE-encoded run. Active
+	//                when runLength>0. runLength decreases by one each time
+	//                Decode is called, and runValue is returned.
 	//
-	// BITPACK  The decoder is in the middle of a bitpacked run. Active when
-	//          setSize>0. setSize decreases by one each time Decode is called,
-	//          and the next bitpacked value in the set is returned.
+	// BITPACK-READY  The Decoder is ready to read a new bit-packed set. Active
+	//                when sets>0 an setSize==0. The Decoder needs to read the
+	//                next set, update setSize and decrement sets.
+	//
+	// BITPACK-SET    The decoder is in the middle of a bitpacked set. Active
+	//                when setSize>0. setSize decreases by one each time Decode
+	//                is called, and the next bitpacked value in the set is
+	//                returned.
 	//
 	// The decoder will always start in the READY state, and the header it pulls
 	// next determines its next state. After fully consuming a run, it reverts
 	// back to READY.
 
-	runValue  int64  // Value of the current run.
+	runValue  uint64 // Value of the current run.
 	runLength uint64 // Number of values left in current run.
 
-	set     []byte // Bit-packed values.
-	setSize byte   // Number of values left in the current bit-packed set.
+	sets     int    // Number of sets left to read, each of which contains 8 elements.
+	setWidth int    // Number of bits to use for each value. Must be no greater than 64.
+	setSize  byte   // Number of values left in the current bit-packed set.
+	set      []byte // Current set of bit-packed values.
 }
 
-var _ page.Decoder[int64] = (*Decoder)(nil)
+var _ page.Decoder[uint64] = (*Decoder)(nil)
 
 // NewDecoder creates a Decoder that reads encoded numbers from r. The width
 // argument specifies the maximum number of bits to use for each value.
@@ -381,51 +396,41 @@ func (dec *Decoder) Type() datasetmd.EncodingType {
 }
 
 // Decode reads the next value from the decoder.
-func (dec *Decoder) Decode() (int64, error) {
-	// Decoders need quite a bit of state to keep track of where they are.
-	//
-	// Initially no data is buffered and we need to read the next uvarint. If
-	// val&1 == 1, we have a bit-packed run, and we need to read width bytes.
-	//
-	// Otherwise, if val&1 == 0, we have an RLE run. We need to read the next
-	// uvarint to get the value, and check the run length from val>>1.
-	//
-	// This means we need to keep track of:
-	//
-	// * Whether we're in a bit-packed run or RLE run.
-	// * The current index (0-7) in a bit-packed run.
-	// * The run length in an RLE run.
-	// * The current index in an RLE run.
-	//
-	// We should be able to reuse some of these. len and off can be used to tell
-	// us how many values are available for reading and how many values we've
-	// read so far.
+func (dec *Decoder) Decode() (uint64, error) {
+	// See comment in [Decoder] for the state machine.
 
-	if dec.runLength == 0 && dec.setSize == 0 {
-		// READY; read the next header.
-		if err := dec.readHeader(); err != nil {
-			return 0, err
-		}
-	}
-
+NextState:
 	switch {
-	case dec.runLength > 0: // RLE run.
+	case dec.runLength == 0 && dec.sets == 0 && dec.setSize == 0: // READY
+		if err := dec.readHeader(); err != nil {
+			return 0, fmt.Errorf("reading header: %w", err)
+		}
+		goto NextState
+
+	case dec.runLength > 0: // RLE
 		dec.runLength--
 		return dec.runValue, nil
 
-	case dec.setSize > 0: // Bit-packed run.
+	case dec.sets > 0 && dec.setSize == 0: // BITPACK-READY
+		// BITPACK-READY; load the next bitpack set.
+		if err := dec.nextBitpackSet(); err != nil {
+			return 0, err
+		}
+		goto NextState
+
+	case dec.setSize > 0: // BITPACK-SET
 		elem := 8 - dec.setSize
 
-		var val int64
-		for bit := 0; bit < dec.width; bit++ {
+		var val uint64
+		for bit := 0; bit < dec.setWidth; bit++ {
 			// Read bit 0 of element index i.
 			// element index i is byte i*8/width.
 
-			index := (int(elem)*dec.width + bit) / 8
-			offset := (int(elem)*dec.width + bit) % 8
+			index := (int(elem)*dec.setWidth + bit) / 8
+			offset := (int(elem)*dec.setWidth + bit) % 8
 			bitValue := dec.set[index] & (1 << offset) >> offset
 
-			val |= int64(bitValue) << bit
+			val |= uint64(bitValue) << bit
 		}
 
 		dec.setSize--
@@ -436,19 +441,6 @@ func (dec *Decoder) Decode() (int64, error) {
 }
 
 func (dec *Decoder) readHeader() error {
-	// If width is 0, we haven't read the width yet.
-	if dec.width == 0 {
-		width, err := dec.r.ReadByte()
-		if err != nil {
-			return err
-		}
-		dec.width = int(width)
-		if dec.width < 1 || dec.width > 64 {
-			return fmt.Errorf("rle: invalid width %d", dec.width)
-		}
-		dec.set = make([]byte, dec.width)
-	}
-
 	// Read the next uvarint.
 	header, err := encoding.ReadUvarint(dec.r)
 	if err != nil {
@@ -456,20 +448,16 @@ func (dec *Decoder) readHeader() error {
 	}
 
 	if header&1 == 1 {
-		// Bit-packed run.
-		count, err := dec.r.Read(dec.set)
-		if err != nil {
-			return err
-		} else if count != dec.width {
-			return fmt.Errorf("rle: bit-packed run too short")
-		}
-
-		dec.setSize = 8 // Always 8 elements in a bit-packed run.
+		// Start of a bit-packed set.
+		dec.sets = int(header >> 7)
+		dec.setWidth = int((header>>1)&0x3f) + 1
+		dec.setSize = 0 // Sets will be loaded in [Decoder.nextBitpackSet].
+		dec.set = make([]byte, dec.setWidth)
 	} else {
 		// RLE run.
 		runLength := header >> 1
 
-		val, err := encoding.ReadVarint(dec.r)
+		val, err := encoding.ReadUvarint(dec.r)
 		if err != nil {
 			return err
 		}
@@ -481,12 +469,31 @@ func (dec *Decoder) readHeader() error {
 	return nil
 }
 
+// nextBitpackSet loads the next bitpack set and decrements the sets counter.
+func (dec *Decoder) nextBitpackSet() error {
+	if dec.sets == 0 {
+		return fmt.Errorf("rle: no bit-packed sets remaining")
+	}
+
+	// Bit-packed run.
+	count, err := dec.r.Read(dec.set)
+	if err != nil {
+		return err
+	} else if count != dec.setWidth {
+		return fmt.Errorf("rle: bit-packed run too short")
+	}
+	dec.setSize = 8 // Always 8 elements in each set.
+	dec.sets--
+	return nil
+}
+
 // Reset resets the decoder to read from r.
 func (dec *Decoder) Reset(r encoding.Reader) {
 	dec.r = r
 	dec.runValue = 0
 	dec.runLength = 0
+	dec.sets = 0
+	dec.setWidth = 0
 	dec.setSize = 0
-	dec.width = 0
 	dec.set = nil
 }

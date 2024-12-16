@@ -76,7 +76,7 @@ func NewBuffer[RowType page.DataType](opts BufferOptions, newEnc NewEncoderFunc[
 
 		valuesWriter: valuesWriter,
 
-		presenceEnc: rle.NewEncoder(presenceBuffer, 1),
+		presenceEnc: rle.NewEncoder(presenceBuffer),
 		valuesEnc:   newEnc(valuesWriter),
 	}
 }
