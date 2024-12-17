@@ -6,10 +6,6 @@ import (
 	"time"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/delta"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/plain"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/stretchr/testify/require"
 )
@@ -31,10 +27,10 @@ func TestDataBuffer_String(t *testing.T) {
 	opts := dataset.BufferOptions{
 		PageSizeHint: 1024,
 		Compression:  datasetmd.COMPRESSION_TYPE_ZSTD,
+		Encoding:     datasetmd.ENCODING_TYPE_PLAIN,
 	}
-	b := dataset.NewBuffer(opts, func(w encoding.Writer) page.Encoder[string] {
-		return plain.NewStringEncoder(w)
-	})
+	b, err := dataset.NewBuffer[string](opts)
+	require.NoError(t, err)
 
 	for _, s := range in {
 		require.True(t, b.Append(s))
@@ -52,10 +48,10 @@ func TestDataBuffer_Number(t *testing.T) {
 	opts := dataset.BufferOptions{
 		PageSizeHint: 1_500_000,
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
+		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
 	}
-	buf := dataset.NewBuffer(opts, func(w encoding.Writer) page.Encoder[int64] {
-		return delta.NewEncoder(w)
-	})
+	buf, err := dataset.NewBuffer[int64](opts)
+	require.NoError(t, err)
 
 	ts := time.Now().UTC()
 	for buf.Append(ts.UnixNano()) {

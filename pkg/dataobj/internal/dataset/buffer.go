@@ -18,6 +18,9 @@ type BufferOptions struct {
 	// and compression, but the actual size may be slightly larger or smaller.
 	PageSizeHint int
 
+	// Encoding is the encoding algorithm to use.
+	Encoding datasetmd.EncodingType
+
 	// Compression is the compression algorithm to use.
 	Compression datasetmd.CompressionType
 }
@@ -60,13 +63,20 @@ type Buffer[RowType page.DataType] struct {
 type NewEncoderFunc[RowType page.DataType] func(encoding.Writer) page.Encoder[RowType]
 
 // NewBuffer creates a new Buffer that stores a sequence of RowType records.
-func NewBuffer[RowType page.DataType](opts BufferOptions, newEnc NewEncoderFunc[RowType]) *Buffer[RowType] {
+// NewBuffer returns an error if there is no encoder available for the
+// combination of RowType and opts.Encoding.
+func NewBuffer[RowType page.DataType](opts BufferOptions) (*Buffer[RowType], error) {
 	var (
 		presenceBuffer = bytes.NewBuffer(nil)
 		valuesBuffer   = bytes.NewBuffer(make([]byte, 0, opts.PageSizeHint))
 
 		valuesWriter = newCompresser(valuesBuffer, opts.Compression)
 	)
+
+	valuesEnc := newEncoder[RowType](valuesWriter, opts.Encoding)
+	if valuesEnc == nil {
+		return nil, fmt.Errorf("no encoder available for %s/%s", page.MetadataValueType[RowType](), opts.Encoding)
+	}
 
 	return &Buffer[RowType]{
 		opts: opts,
@@ -77,8 +87,8 @@ func NewBuffer[RowType page.DataType](opts BufferOptions, newEnc NewEncoderFunc[
 		valuesWriter: valuesWriter,
 
 		presenceEnc: bitmap.NewEncoder(presenceBuffer),
-		valuesEnc:   newEnc(valuesWriter),
-	}
+		valuesEnc:   valuesEnc,
+	}, nil
 }
 
 // Append appends a new RowType record into the Buffer. Append returns true if
