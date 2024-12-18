@@ -12,11 +12,11 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
 )
 
-// scan* methods shared by Decoder implementations.
+// decode* methods for metadata shared by Decoder implementations.
 
-// scanTailer scans the tailer of the file to retrieve the metadata size and
-// the magic value.
-func scanTailer(r encoding.Reader) (metadataSize uint32, err error) {
+// decodeTailer decodes the tailer of the file to retrieve the metadata size
+// and the magic value.
+func decodeTailer(r encoding.Reader) (metadataSize uint32, err error) {
 	if err := binary.Read(r, binary.LittleEndian, &metadataSize); err != nil {
 		return 0, fmt.Errorf("reading metadata size: %w", err)
 	}
@@ -31,8 +31,8 @@ func scanTailer(r encoding.Reader) (metadataSize uint32, err error) {
 	return
 }
 
-// scanFileMetadata scans file metadata from r.
-func scanFileMetadata(r encoding.Reader) (*filemd.Metadata, error) {
+// decodeFileMetadata decodes file metadata from r.
+func decodeFileMetadata(r encoding.Reader) (*filemd.Metadata, error) {
 	fileFormatVersion, err := encoding.ReadUvarint(r)
 	if err != nil {
 		return nil, fmt.Errorf("read file format version: %w", err)
@@ -41,14 +41,14 @@ func scanFileMetadata(r encoding.Reader) (*filemd.Metadata, error) {
 	}
 
 	var metadata filemd.Metadata
-	if err := scanProto(r, &metadata); err != nil {
+	if err := decodeProto(r, &metadata); err != nil {
 		return nil, fmt.Errorf("stream metadata: %w", err)
 	}
 	return &metadata, nil
 }
 
-// scanStreamsMetadata scans streams section metadata from r.
-func scanStreamsMetadata(r encoding.Reader) (*streamsmd.Metadata, error) {
+// decodeStreamsMetadata decodes streams section metadata from r.
+func decodeStreamsMetadata(r encoding.Reader) (*streamsmd.Metadata, error) {
 	formatVersion, err := encoding.ReadUvarint(r)
 	if err != nil {
 		return nil, fmt.Errorf("read streams format version: %w", err)
@@ -57,24 +57,24 @@ func scanStreamsMetadata(r encoding.Reader) (*streamsmd.Metadata, error) {
 	}
 
 	var metadata streamsmd.Metadata
-	if err := scanProto(r, &metadata); err != nil {
+	if err := decodeProto(r, &metadata); err != nil {
 		return nil, fmt.Errorf("streams metadata: %w", err)
 	}
 	return &metadata, nil
 }
 
-// scanStreamsColumnMetadata scans a column's metadata from r.
-func scanStreamsColumnMetadata(r encoding.Reader) (*streamsmd.ColumnMetadata, error) {
+// decodeStreamsColumnMetadata decodes a column's metadata from r.
+func decodeStreamsColumnMetadata(r encoding.Reader) (*streamsmd.ColumnMetadata, error) {
 	var metadata streamsmd.ColumnMetadata
-	if err := scanProto(r, &metadata); err != nil {
+	if err := decodeProto(r, &metadata); err != nil {
 		return nil, fmt.Errorf("streams column metadata: %w", err)
 	}
 	return &metadata, nil
 }
 
-// scanProto scans a proto message from r and stores it in pb. Proto messages
+// decodeProto decodes a proto message from r and stores it in pb. Proto messages
 // are expected to be encoded with their size, followed by the proto bytes.
-func scanProto(r encoding.Reader, pb proto.Message) error {
+func decodeProto(r encoding.Reader, pb proto.Message) error {
 	// TODO(rfratto): Should we use a pool for the protoBytes buffer here?
 
 	size, err := binary.ReadUvarint(r)
