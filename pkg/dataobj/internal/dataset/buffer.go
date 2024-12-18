@@ -193,7 +193,7 @@ func (buf *Buffer[RowType]) Flush() (Page, error) {
 		return Page{}, fmt.Errorf("writing values: %w", err)
 	}
 
-	checksum := crc32.Checksum(finalData.Bytes(), crc32.IEEETable)
+	checksum := crc32.Checksum(finalData.Bytes(), checksumTable)
 
 	page := Page{
 		UncompressedSize: headerSize + presenceSize + buf.valuesWriter.UncompressedSize(),
@@ -218,5 +218,16 @@ func (buf *Buffer[RowType]) Flush() (Page, error) {
 		Stats: nil,
 	}
 
+	// Reset state before returning.
+	buf.reset()
 	return page, nil
+}
+
+func (buf *Buffer[RowType]) reset() {
+	buf.presenceBuffer.Reset()
+	buf.valuesBuffer.Reset()
+	buf.valuesWriter.Reset(buf.valuesBuffer)
+	buf.presenceBuffer.Reset()
+	buf.valuesEnc.Reset(buf.valuesWriter)
+	buf.rows = 0
 }

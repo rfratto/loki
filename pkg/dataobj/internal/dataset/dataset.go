@@ -4,6 +4,7 @@ package dataset
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -35,25 +36,35 @@ type Page struct {
 
 // Reader returns a reader for decompressed page data. Reader returns an error
 // if the CRC32 fails to validate.
-func (p *Page) Reader() (io.ReadCloser, error) {
+func (p *Page) Reader() (presence io.ReadCloser, values io.ReadCloser, err error) {
 	if actual := crc32.Checksum(p.Data, checksumTable); p.CRC32 != actual {
-		return nil, fmt.Errorf("invalid crc32 checksum %x, expected %x", actual, p.CRC32)
+		return nil, nil, fmt.Errorf("invalid crc32 checksum %x, expected %x", actual, p.CRC32)
 	}
 
+	// The first thing written to the page is the presence bitmap size.
+	bitmapSize, n := binary.Uvarint(p.Data)
+	if n <= 0 {
+		return nil, nil, fmt.Errorf("reading presence bitmap size: %w", err)
+	}
+
+	bitmapReader := bytes.NewReader(p.Data[n : n+int(bitmapSize)])
+	dataReader := bytes.NewReader(p.Data[n+int(bitmapSize):])
+
+	// The rest of the page is the values.
 	switch p.Compression {
 	case datasetmd.COMPRESSION_TYPE_UNSPECIFIED, datasetmd.COMPRESSION_TYPE_NONE:
-		return io.NopCloser(bytes.NewReader(p.Data)), nil
+		return io.NopCloser(bitmapReader), io.NopCloser(dataReader), nil
 
 	case datasetmd.COMPRESSION_TYPE_SNAPPY:
-		sr := snappy.NewReader(bytes.NewReader(p.Data))
-		return io.NopCloser(sr), nil
+		sr := snappy.NewReader(dataReader)
+		return io.NopCloser(bitmapReader), io.NopCloser(sr), nil
 
 	case datasetmd.COMPRESSION_TYPE_ZSTD:
-		zr, err := zstd.NewReader(bytes.NewReader(p.Data))
+		zr, err := zstd.NewReader(dataReader)
 		if err != nil {
-			return nil, fmt.Errorf("creating zstd reader: %w", err)
+			return nil, nil, fmt.Errorf("creating zstd reader: %w", err)
 		}
-		return newZstdReader(zr), nil
+		return io.NopCloser(bitmapReader), newZstdReader(zr), nil
 	}
 
 	panic(fmt.Sprintf("Unexpected compression type %s", p.Compression.String()))
