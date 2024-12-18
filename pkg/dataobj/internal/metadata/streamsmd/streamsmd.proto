@@ -38,6 +38,9 @@ enum ColumnType {
 
   // COLUMN_TYPE_LABEL is a column containing a label.
   COLUMN_TYPE_LABEL = 3;
+
+  // COLUMN_TYPE_ROWS is a column indicating the number of rows for a stream.
+  COLUMN_TYPE_ROWS = 4;
 }
 
 // ColumnMetadata describes the metadata for a column.

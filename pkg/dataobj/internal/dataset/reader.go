@@ -11,15 +11,47 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
 )
 
-// IterPages iterates over all values in the provided Pages. The value type in
-// the pages must be equivalent to the Go type provided. If a decoding error is
-// encountered in any page, the iterator emits the error and stops.
-func IterPages[Value page.DataType](pages ...Page) iter.Seq2[Entry[Value], error] {
+// IterPages iterates over all values from the provided iterator of pages. The
+// value type in pages must match the Value type parameter. If a decoding error
+// is encountered in any page, the iterator emits the error and stops.
+//
+// Row numbers emitted by IterPagesSlice will be relative to the pages iterated
+// over, and not the entire column.
+func IterPages[Value page.DataType](pageIter iter.Seq2[Page, error]) iter.Seq2[Entry[Value], error] {
+	return func(yield func(Entry[Value], error) bool) {
+		var row int
+
+		for p, err := range pageIter {
+			if err != nil {
+				yield(Entry[Value]{}, err)
+				return
+			}
+
+			for ent, err := range IterPage[Value](row, p) {
+				if !yield(ent, err) {
+					return
+				}
+				if err != nil {
+					return
+				}
+				row++
+			}
+		}
+	}
+}
+
+// IterPagesSlice iterates over all values in the provided Pages. The value
+// type in the pages must be equivalent to the Go type provided. If a decoding
+// error is encountered in any page, the iterator emits the error and stops.
+//
+// Row numbers emitted by IterPagesSlice will be relative to the set of pages
+// provided, not the column.
+func IterPagesSlice[Value page.DataType](pages ...Page) iter.Seq2[Entry[Value], error] {
 	return func(yield func(Entry[Value], error) bool) {
 		var row int
 
 		for _, p := range pages {
-			for ent, err := range iterPageFromRow[Value](row, p) {
+			for ent, err := range IterPage[Value](row, p) {
 				if !yield(ent, err) {
 					return
 				}
@@ -35,11 +67,11 @@ func IterPages[Value page.DataType](pages ...Page) iter.Seq2[Entry[Value], error
 // IterPage iterates over all values in the provided Page. The value type in
 // the page must be equivalent to the Go Value type provided. If a decoding
 // error is encountered, the iterator emits the error and stops.
-func IterPage[Value page.DataType](p Page) iter.Seq2[Entry[Value], error] {
-	return iterPageFromRow[Value](0, p)
-}
+//
+// The row numbers emitted start at rowOffset up to rowOffset+p.RowCount.
+func IterPage[Value page.DataType](rowOffset int, p Page) iter.Seq2[Entry[Value], error] {
+	row := rowOffset
 
-func iterPageFromRow[Value page.DataType](row int, p Page) iter.Seq2[Entry[Value], error] {
 	return func(yield func(Entry[Value], error) bool) {
 		valueType := page.MetadataValueType[Value]()
 		if valueType != p.Value {

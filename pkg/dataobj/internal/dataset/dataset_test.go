@@ -51,7 +51,7 @@ func Test(t *testing.T) {
 	// That way, in == actual if and only if the row numbers were correct.
 	actual := make([]string, len(in))
 
-	for ent, err := range dataset.IterPages[string](column.Pages()...) {
+	for ent, err := range dataset.IterPagesSlice[string](column.Pages()...) {
 		assert.NoError(t, err)
 
 		if ent.Row >= len(actual) {

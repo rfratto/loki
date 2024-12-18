@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
 // A Column holds a sequence of entries of a given Value type. Values are
@@ -62,6 +63,35 @@ func (c *Column[Value]) Append(row int, value Value) error {
 	panic("column.Append: failed to append value to fresh buffer")
 }
 
+// Backfill adds NULLs into Column up to the provided row number. If values
+// exist up to the row number, Backfill does nothing.
+func (c *Column[Value]) Backfill(row int) {
+	// We give two attempts to append the data to the buffer; if the buffer is
+	// full, we cut a page and then append again to the newly reset buffer.
+	//
+	// The second iteration should never fail, as the buffer will always be
+	// empty.
+	for range 2 {
+		if c.backfill(row) {
+			return
+		}
+		c.Flush()
+	}
+
+	panic("column.Backfill: failed to append value to fresh buffer")
+}
+
+func (c *Column[Value]) backfill(row int) bool {
+	for row > c.rows {
+		if !c.buf.AppendNull() {
+			return false
+		}
+		c.rows++
+	}
+
+	return true
+}
+
 func (c *Column[Value]) append(row int, value Value) bool {
 	for row > c.rows {
 		if !c.buf.AppendNull() {
@@ -94,4 +124,48 @@ func (c *Column[Value]) Flush() {
 // sure all data is available, call [Column.Flush] before calling Pages.
 func (c *Column[Value]) Pages() []Page {
 	return c.pages
+}
+
+// ColumnInfo describes a [Column].
+type ColumnInfo struct {
+	Name string              // Name of the column, if any.
+	Type datasetmd.ValueType // Type of values in the column.
+
+	RowsCount        int // Total number of rows in the column.
+	CompressedSize   int // Total size of all pages in the column after compression.
+	UncompressedSize int // Total size of all pages in the column before compression.
+
+	Compression datasetmd.CompressionType // Compression used for the column.
+
+	Statistics *datasetmd.Statistics // Optional statistics for the column.
+}
+
+// Info returns [ColumnInfo] for the column.
+//
+// Any unflushed data is not included in calculated info. To make sure all data
+// is available, call [Column.Flush] before calling Pages.
+//
+// By default, ColumnInfo.Statistics is nil. Callers must manually compute
+// statistics for columns if needed.
+func (c *Column[Value]) Info() ColumnInfo {
+	info := ColumnInfo{
+		Name: c.name,
+		Type: page.MetadataValueType[Value](),
+
+		Compression: c.opts.Compression,
+	}
+
+	// TODO(rfratto): Should we compute column-wide statistics if they're
+	// available in pages?
+	//
+	// That would potentially work for min/max values, but not for count
+	// distinct, unless we had a way to pass sketches around.
+
+	for _, page := range c.pages {
+		info.RowsCount += page.RowCount
+		info.CompressedSize += page.CompressedSize
+		info.UncompressedSize += page.UncompressedSize
+	}
+
+	return info
 }
