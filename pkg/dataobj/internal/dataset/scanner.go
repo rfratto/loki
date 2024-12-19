@@ -4,12 +4,11 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"iter"
 	"math"
 	"slices"
-	"unsafe"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
@@ -326,89 +325,6 @@ type (
 
 // ScannerEntry represents an individual entry in a scanned column.
 type ScannerEntry struct {
-	Row   int          // Column-wide row number of the scanned entry.
-	Value ScannerValue // Scanned value.
-}
-
-// ScannerValue represents a scanned value in a column.
-type ScannerValue struct {
-	// The internal representation of ScannerValue is based on log/slog, which
-	// designed its Value type to avoid allocations.
-	//
-	// Our subset of usage avoids allocations entirely.
-
-	_ [0]func() // Disable equality checking
-
-	// num holds the value for numeric types in the [page.DataType] type
-	// constraint and the string length for string types.
-	num uint64
-
-	// If any is of type datasetmd.ValueType, then the value is in num as
-	// described above.
-	//
-	// If any is of type *byte, then the ScannerValue is
-	// datasetmd.VALUE_TYPE_STRING and the string value consists of the length in
-	// num and the pointer in any.
-	any any
-}
-
-func int64Value(value int64) ScannerValue {
-	return ScannerValue{num: uint64(value), any: datasetmd.VALUE_TYPE_INT64}
-}
-
-func uint64Value(value uint64) ScannerValue {
-	return ScannerValue{num: value, any: datasetmd.VALUE_TYPE_UINT64}
-}
-
-func stringValue(value string) ScannerValue {
-	return ScannerValue{num: uint64(len(value)), any: (*byte)(unsafe.StringData(value))}
-}
-
-// Type return's the dataset type of sv.
-func (sv ScannerValue) Type() datasetmd.ValueType {
-	if sv.IsNil() {
-		return datasetmd.VALUE_TYPE_UNSPECIFIED
-	}
-
-	switch v := sv.any.(type) {
-	case datasetmd.ValueType:
-		return v
-	case *byte:
-		return datasetmd.VALUE_TYPE_STRING
-	default:
-		panic(fmt.Sprintf("ScannerValue has unexpected type %T", v))
-	}
-}
-
-// IsNil returns true if sv is nil.
-func (sv ScannerValue) IsNil() bool {
-	return sv.any == nil
-}
-
-// Int64 returns sv's value as an int64. It panics if sv is not a signed
-// integer.
-func (sv ScannerValue) Int64() int64 {
-	if expect, actual := datasetmd.VALUE_TYPE_INT64, sv.Type(); expect != actual {
-		panic(fmt.Sprintf("ScannerValue kind is %s, not %s", actual, expect))
-	}
-	return int64(sv.num)
-}
-
-// Uint64 returns sv's value as a uint64. It panics if sv is not a signed
-// integer.
-func (sv ScannerValue) Uint64() uint64 {
-	if expect, actual := datasetmd.VALUE_TYPE_UINT64, sv.Type(); expect != actual {
-		panic(fmt.Sprintf("ScannerValue kind is %s, not %s", actual, expect))
-	}
-	return sv.num
-}
-
-// String returns sv's value as a string. Because of Go's String method
-// convention, if sv is not a string, String returns a string of the form
-// "VALUE_TYPE_T" where T is the appropriate type.
-func (sv ScannerValue) String() string {
-	if bp, ok := sv.any.(*byte); ok {
-		return unsafe.String(bp, sv.num)
-	}
-	return sv.Type().String()
+	Row   int        // Column-wide row number of the scanned entry.
+	Value page.Value // Scanned value.
 }

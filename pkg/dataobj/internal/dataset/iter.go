@@ -200,19 +200,19 @@ func newEntryDecoder(r encoding.Reader, vt datasetmd.ValueType, enc datasetmd.En
 	return ed, nil
 }
 
-func (ed *entryDecoder) Decode() (ScannerValue, error) {
+func (ed *entryDecoder) Decode() (page.Value, error) {
 	switch {
 	case ed.intDecoder != nil:
 		val, err := ed.intDecoder.Decode()
-		return int64Value(val), err
+		return page.Int64Value(val), err
 	case ed.uintDecoder != nil:
 		val, err := ed.uintDecoder.Decode()
-		return uint64Value(val), err
+		return page.Uint64Value(val), err
 	case ed.stringDecoder != nil:
 		val, err := ed.stringDecoder.Decode()
-		return stringValue(val), err
+		return page.StringValue(val), err
 	default:
-		return ScannerValue{}, fmt.Errorf("no decoder available")
+		return page.Value{}, fmt.Errorf("no decoder available")
 	}
 }
 
