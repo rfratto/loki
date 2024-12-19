@@ -9,6 +9,7 @@ import (
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
 )
@@ -35,7 +36,7 @@ func (dec *readSeekerDecoder) Sections(_ context.Context) ([]*filemd.SectionInfo
 	}
 	r := bufio.NewReader(io.LimitReader(dec.r, int64(metadataSize)))
 
-	md, err := scanFileMetadata(r)
+	md, err := decodeFileMetadata(r)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +51,10 @@ type readSeekerStreamsDecoder struct {
 	r io.ReadSeeker
 }
 
+func (dec *readSeekerStreamsDecoder) DatasetDecoder() dataset.PageGetter {
+	return &readSeekerDatasetDecoder{r: dec.r}
+}
+
 func (dec *readSeekerStreamsDecoder) Columns(_ context.Context, section *filemd.SectionInfo) ([]*streamsmd.ColumnDesc, error) {
 	if section.Type != filemd.SECTION_TYPE_STREAMS {
 		return nil, fmt.Errorf("section is type %s, not streams", section.Type)
@@ -60,7 +65,7 @@ func (dec *readSeekerStreamsDecoder) Columns(_ context.Context, section *filemd.
 	}
 	r := bufio.NewReader(io.LimitReader(dec.r, int64(section.MetadataSize)))
 
-	md, err := scanStreamsMetadata(r)
+	md, err := decodeStreamsMetadata(r)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +78,7 @@ func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, column *streamsmd.
 	}
 	r := bufio.NewReader(io.LimitReader(dec.r, int64(column.Info.MetadataSize)))
 
-	md, err := scanStreamsColumnMetadata(r)
+	md, err := decodeStreamsColumnMetadata(r)
 	if err != nil {
 		return nil, err
 	}
@@ -93,25 +98,11 @@ func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*Colum
 		if _, err := dec.r.Seek(int64(page.Info.DataOffset), io.SeekStart); err != nil {
 			return dataset.Page{}, err
 		}
-
 		data := make([]byte, page.Info.DataSize)
 		if _, err := io.ReadFull(dec.r, data); err != nil {
 			return dataset.Page{}, fmt.Errorf("read page data: %w", err)
 		}
-
-		return dataset.Page{
-			UncompressedSize: int(page.Info.UncompressedSize),
-			CompressedSize:   int(page.Info.CompressedSize),
-			CRC32:            page.Info.Crc32,
-			RowCount:         int(page.Info.RowsCount),
-
-			Value:       column.Info.ValueType,
-			Compression: page.Info.Compression,
-			Encoding:    page.Info.Encoding,
-			Stats:       page.Info.Statistics,
-
-			Data: data,
-		}, nil
+		return dataset.RawPage(column.Info, page.Info, data), nil
 	}
 
 	return func(yield func(dataset.Page, error) bool) {
@@ -125,4 +116,41 @@ func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*Colum
 			}
 		}
 	}
+}
+
+type readSeekerDatasetDecoder struct {
+	r io.ReadSeeker
+}
+
+func (dec *readSeekerDatasetDecoder) ColumnPages(ctx context.Context, column *datasetmd.ColumnInfo) ([]*datasetmd.PageInfo, error) {
+	if _, err := dec.r.Seek(int64(column.MetadataOffset), io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek to stream metadata: %w", err)
+	}
+	r := bufio.NewReader(io.LimitReader(dec.r, int64(column.MetadataSize)))
+
+	md, err := decodeStreamsColumnMetadata(r)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]*datasetmd.PageInfo, 0, len(md.Pages))
+	for _, page := range md.Pages {
+		res = append(res, page.Info)
+	}
+	return res, nil
+}
+
+func (dec *readSeekerDatasetDecoder) ReadPages(ctx context.Context, pages []*datasetmd.PageInfo) ([]dataset.PageData, error) {
+	res := make([]dataset.PageData, 0, len(pages))
+	for _, pageToRead := range pages {
+		if _, err := dec.r.Seek(int64(pageToRead.DataOffset), io.SeekStart); err != nil {
+			return nil, err
+		}
+		data := make([]byte, pageToRead.DataSize)
+		if _, err := io.ReadFull(dec.r, data); err != nil {
+			return nil, fmt.Errorf("read page data: %w", err)
+		}
+		res = append(res, data)
+	}
+	return res, nil
 }

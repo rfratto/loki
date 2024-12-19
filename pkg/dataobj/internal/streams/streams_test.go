@@ -30,10 +30,8 @@ func Test(t *testing.T) {
 		streamsTracker.AddStreamRecord(tc.Labels, tc.Time)
 	}
 
-	var buf bytes.Buffer
-	enc, err := obj.NewEncoder(&buf)
+	data, err := buildObject(streamsTracker)
 	require.NoError(t, err)
-	require.NoError(t, streamsTracker.WriteTo(enc, 1, 1))
 
 	expect := []streams.Stream{
 		{
@@ -50,7 +48,7 @@ func Test(t *testing.T) {
 		},
 	}
 
-	dec := obj.ReadSeekerDecoder(bytes.NewReader(buf.Bytes()))
+	dec := obj.ReadSeekerDecoder(bytes.NewReader(data))
 
 	var actual []streams.Stream
 	for s, err := range streams.IterStreams(context.TODO(), dec) {
@@ -59,4 +57,15 @@ func Test(t *testing.T) {
 	}
 
 	require.Equal(t, expect, actual)
+}
+
+func buildObject(st *streams.Streams) ([]byte, error) {
+	var buf bytes.Buffer
+	enc, err := obj.NewEncoder(&buf)
+	if err != nil {
+		return nil, err
+	} else if err := st.WriteTo(enc, 1024, 1024); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

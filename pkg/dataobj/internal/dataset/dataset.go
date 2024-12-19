@@ -18,6 +18,9 @@ var (
 	checksumTable = crc32.MakeTable(crc32.Castagnoli)
 )
 
+// PageData holds compressed and encoded page data.
+type PageData []byte
+
 // A Page is a single unit of data within a column. It is encoded with a
 // specific format and is optionally compressed.
 type Page struct {
@@ -31,7 +34,25 @@ type Page struct {
 	Encoding    datasetmd.EncodingType    // Encoding used for the decompressed page.
 	Stats       *datasetmd.Statistics     // Optional statistics for the page.
 
-	Data []byte // Data is the compressed and encoded page data.
+	Data PageData // Data for the page.
+}
+
+// RawPage converts metadata and raw data into a Page. The arguments are not
+// validated to be correct.
+func RawPage(column *datasetmd.ColumnInfo, page *datasetmd.PageInfo, data PageData) Page {
+	return Page{
+		UncompressedSize: int(page.UncompressedSize),
+		CompressedSize:   int(page.CompressedSize),
+		CRC32:            uint32(page.Crc32),
+		RowCount:         int(page.RowsCount),
+
+		Value:       column.ValueType,
+		Compression: page.Compression,
+		Encoding:    page.Encoding,
+		Stats:       page.Statistics,
+
+		Data: data,
+	}
 }
 
 // Reader returns a reader for decompressed page data. Reader returns an error

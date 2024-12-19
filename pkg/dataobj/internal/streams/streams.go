@@ -40,6 +40,8 @@ type Stream struct {
 // The number of calls to AddStreamRecord is used to track the number of rows
 // for a stream.
 func (s *Streams) AddStreamRecord(streamLabels labels.Labels, ts time.Time) {
+	ts = ts.UTC()
+
 	stream := s.getOrAddStream(streamLabels)
 	if stream.MinTimestamp.IsZero() || ts.Before(stream.MinTimestamp) {
 		stream.MinTimestamp = ts

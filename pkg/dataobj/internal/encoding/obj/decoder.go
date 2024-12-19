@@ -26,6 +26,9 @@ type (
 
 	// StreamsDecoder supports decoding data within a streams section.
 	StreamsDecoder interface {
+		// DatasetDecoder returns a DatasetDecoder for data in the streams section.
+		DatasetDecoder() dataset.PageGetter
+
 		// Columns describes the set of columns in the provided section.
 		Columns(ctx context.Context, section *filemd.SectionInfo) ([]*streamsmd.ColumnDesc, error)
 
