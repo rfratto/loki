@@ -61,6 +61,13 @@ func (v Value) IsNil() bool {
 	return v.any == nil
 }
 
+// IsZero reports v is the zero value.
+func (v Value) IsZero() bool {
+	// This works in all cases: for numbes, 0 is the zero value; for strings, a
+	// length of zero (v.num) is the zero value.
+	return v.num == 0
+}
+
 // Type returns the dataset type of v. If v is nil, Type returns
 // [datasetmd.VALUE_TYPE_UNSPECIFIED].
 func (v Value) Type() datasetmd.ValueType {

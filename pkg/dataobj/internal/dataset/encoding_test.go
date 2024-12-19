@@ -15,8 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type encodingFormat interface{ Type() datasetmd.EncodingType }
-
 // Test_encodings ensures that all encoders and decoders are correctly registered.
 //
 // It uses protobuf reflection to look up all possible values for enums and
@@ -42,16 +40,17 @@ func Test_encodings(t *testing.T) {
 			newEncoder, ok := encoders[key]
 			assert.True(t, ok, fmt.Sprintf("missing encoder entry for %s/%s", key.value, key.encoding))
 			if newEncoder != nil {
-				enc := newEncoder(encoding.Discard).(encodingFormat)
-				assert.Equal(t, key.encoding, enc.Type(), "encoder type mismatch for %s/%s: got %s", key.value, key.encoding, enc.Type())
+				enc := newEncoder(encoding.Discard)
+				assert.Equal(t, key.value, enc.ValueType(), "value type mismatch for %s/%s: got %s", key.value, key.encoding, enc.ValueType())
+				assert.Equal(t, key.encoding, enc.EncodingType(), "encoder type mismatch for %s/%s: got %s", key.value, key.encoding, enc.EncodingType())
 			}
 
 			newDecoder, ok := decoders[key]
 			assert.True(t, ok, fmt.Sprintf("missing decoder entry for %s/%s", key.value, key.encoding))
 			if newDecoder != nil {
-				dec := newDecoder(bytes.NewReader(nil)).(encodingFormat)
-				assert.Equal(t, key.encoding, dec.Type())
-				assert.Equal(t, key.encoding, dec.Type(), "decoder type mismatch for %s/%s: got %s", key.value, key.encoding, dec.Type())
+				dec := newDecoder(bytes.NewReader(nil))
+				assert.Equal(t, key.value, dec.ValueType(), "value type mismatch for %s/%s: got %s", key.value, key.encoding, dec.ValueType())
+				assert.Equal(t, key.encoding, dec.EncodingType(), "decoder type mismatch for %s/%s: got %s", key.value, key.encoding, dec.EncodingType())
 			}
 		}
 	}

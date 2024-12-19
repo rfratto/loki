@@ -8,6 +8,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/obj"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
 	"github.com/prometheus/prometheus/model/labels"
@@ -82,8 +83,9 @@ func (s *Streams) getOrAddStream(streamLabels labels.Labels) *Stream {
 //
 // Streams are encoded in the order they were first appended.
 func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
-	minTimestampColumn, err := dataset.NewColumn[int64]("", dataset.BufferOptions{
+	minTimestampColumn, err := dataset.NewColumn("", dataset.BufferOptions{
 		PageSizeHint: pageSize,
+		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 	})
@@ -91,8 +93,9 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating minimum timestamp column: %w", err)
 	}
 
-	maxTimestampColumn, err := dataset.NewColumn[int64]("", dataset.BufferOptions{
+	maxTimestampColumn, err := dataset.NewColumn("", dataset.BufferOptions{
 		PageSizeHint: pageSize,
+		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 	})
@@ -100,8 +103,9 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating maximum timestamp column: %w", err)
 	}
 
-	recordsCountColumn, err := dataset.NewColumn[int64]("", dataset.BufferOptions{
+	recordsCountColumn, err := dataset.NewColumn("", dataset.BufferOptions{
 		PageSizeHint: pageSize,
+		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 	})
@@ -110,18 +114,19 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 	}
 
 	var (
-		labelColumns      = []*dataset.Column[string]{}
+		labelColumns      = []*dataset.Column{}
 		labelColumnLookup = map[string]int{} // Name to index
 	)
 
-	getLabelColumn := func(name string) (*dataset.Column[string], error) {
+	getLabelColumn := func(name string) (*dataset.Column, error) {
 		idx, ok := labelColumnLookup[name]
 		if ok {
 			return labelColumns[idx], nil
 		}
 
-		labelColumn, err := dataset.NewColumn[string](name, dataset.BufferOptions{
+		labelColumn, err := dataset.NewColumn(name, dataset.BufferOptions{
 			PageSizeHint: pageSize,
+			Value:        datasetmd.VALUE_TYPE_STRING,
 			Encoding:     datasetmd.ENCODING_TYPE_PLAIN,
 			Compression:  datasetmd.COMPRESSION_TYPE_ZSTD,
 		})
@@ -137,16 +142,16 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 	// First, populate all of our columns.
 	for i, stream := range s.orderedStreams {
 		// Append only fails if the rows are out-of-order, which can't happen here.
-		_ = minTimestampColumn.Append(i, stream.MinTimestamp.UnixNano())
-		_ = maxTimestampColumn.Append(i, stream.MaxTimestamp.UnixNano())
-		_ = recordsCountColumn.Append(i, int64(stream.Rows))
+		_ = minTimestampColumn.Append(i, page.Int64Value(stream.MinTimestamp.UnixNano()))
+		_ = maxTimestampColumn.Append(i, page.Int64Value(stream.MaxTimestamp.UnixNano()))
+		_ = recordsCountColumn.Append(i, page.Int64Value(int64(stream.Rows)))
 
 		for _, label := range stream.Labels {
 			labelColumn, err := getLabelColumn(label.Name)
 			if err != nil {
 				return fmt.Errorf("creating label column: %w", err)
 			}
-			_ = labelColumn.Append(i, label.Value)
+			_ = labelColumn.Append(i, page.StringValue(label.Value))
 		}
 	}
 

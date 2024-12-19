@@ -7,8 +7,6 @@ import (
 	"io"
 	"iter"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"golang.org/x/net/context"
@@ -118,8 +116,8 @@ func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.Pa
 		defer valuesReader.Close()
 
 		presenceDec := bitmap.NewDecoder(bufio.NewReader(presenceReader))
-		valuesDec, err := newEntryDecoder(bufio.NewReader(valuesReader), column.ValueType, p.Encoding)
-		if err != nil {
+		valuesDec := newDecoder(bufio.NewReader(valuesReader), column.ValueType, p.Encoding)
+		if valuesDec == nil {
 			yield(ScannerEntry{}, fmt.Errorf("no decoder available: %w", err))
 			return
 		}
@@ -134,9 +132,12 @@ func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.Pa
 			} else if err != nil {
 				yield(entry, fmt.Errorf("decoding presence: %w", err))
 				return
+			} else if present.Type() != datasetmd.VALUE_TYPE_UINT64 {
+				yield(entry, fmt.Errorf("invalid presence type: %v", present.Type()))
+				return
 			}
 
-			if present == 1 {
+			if present.Uint64() == 1 {
 				value, err := valuesDec.Decode()
 				if err != nil {
 					yield(entry, fmt.Errorf("decoding value: %w", err))
@@ -165,55 +166,6 @@ func (it *columnIter) pageForRow(row int) (pi *datasetmd.PageInfo, startRow, end
 	}
 
 	return nil, -1, -1
-}
-
-type entryDecoder struct {
-	r encoding.Reader
-
-	// Possible decoders that may be set.
-	//
-	// TODO(rfratto): this is gross, and generics have given us enough of a pain
-	// to deal with. Let's move EntryValue to page.Value and use it more readily.
-
-	intDecoder    page.Decoder[int64]
-	uintDecoder   page.Decoder[uint64]
-	stringDecoder page.Decoder[string]
-}
-
-func newEntryDecoder(r encoding.Reader, vt datasetmd.ValueType, enc datasetmd.EncodingType) (*entryDecoder, error) {
-	ed := &entryDecoder{r: r}
-
-	switch vt {
-	case datasetmd.VALUE_TYPE_INT64:
-		ed.intDecoder = newDecoder[int64](r, enc)
-	case datasetmd.VALUE_TYPE_UINT64:
-		ed.uintDecoder = newDecoder[uint64](r, enc)
-	case datasetmd.VALUE_TYPE_STRING:
-		ed.stringDecoder = newDecoder[string](r, enc)
-	default:
-		return nil, fmt.Errorf("unsupported value type %s", vt)
-	}
-	if ed.intDecoder == nil && ed.uintDecoder == nil && ed.stringDecoder == nil {
-		return nil, fmt.Errorf("unsupported decoding value=%s format=%s", vt, enc)
-	}
-
-	return ed, nil
-}
-
-func (ed *entryDecoder) Decode() (page.Value, error) {
-	switch {
-	case ed.intDecoder != nil:
-		val, err := ed.intDecoder.Decode()
-		return page.Int64Value(val), err
-	case ed.uintDecoder != nil:
-		val, err := ed.uintDecoder.Decode()
-		return page.Uint64Value(val), err
-	case ed.stringDecoder != nil:
-		val, err := ed.stringDecoder.Decode()
-		return page.StringValue(val), err
-	default:
-		return page.Value{}, fmt.Errorf("no decoder available")
-	}
 }
 
 // preloadPages preloads a set of pages in bulk across the following iterators.

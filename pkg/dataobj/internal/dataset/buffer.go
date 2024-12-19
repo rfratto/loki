@@ -18,6 +18,9 @@ type BufferOptions struct {
 	// and compression, but the actual size may be slightly larger or smaller.
 	PageSizeHint int
 
+	// Value is the value type of data to write.
+	Value datasetmd.ValueType
+
 	// Encoding is the encoding algorithm to use.
 	Encoding datasetmd.EncodingType
 
@@ -27,7 +30,7 @@ type BufferOptions struct {
 
 // Buffer accumulates RowType records in memory for a [Column]. A
 // Buffer can be converted into a [Page] by calling [Buffer.Flush].
-type Buffer[RowType page.DataType] struct {
+type Buffer struct {
 	// Each Buffer writes two sets of data.
 	//
 	// The first set of data is a presence bitmap which tells readers which rows
@@ -55,17 +58,17 @@ type Buffer[RowType page.DataType] struct {
 	valuesWriter *compresser // Compresses data and writes to valuesBuffer.
 
 	presenceEnc *bitmap.Encoder
-	valuesEnc   page.Encoder[RowType]
+	valuesEnc   page.ValueEncoder
 
 	rows int // Number of rows appended to the Buffer.
 }
 
-type NewEncoderFunc[RowType page.DataType] func(encoding.Writer) page.Encoder[RowType]
+type NewEncoderFunc func(encoding.Writer) page.ValueEncoder
 
 // NewBuffer creates a new Buffer that stores a sequence of RowType records.
 // NewBuffer returns an error if there is no encoder available for the
 // combination of RowType and opts.Encoding.
-func NewBuffer[RowType page.DataType](opts BufferOptions) (*Buffer[RowType], error) {
+func NewBuffer(opts BufferOptions) (*Buffer, error) {
 	var (
 		presenceBuffer = bytes.NewBuffer(nil)
 		valuesBuffer   = bytes.NewBuffer(make([]byte, 0, opts.PageSizeHint))
@@ -73,12 +76,12 @@ func NewBuffer[RowType page.DataType](opts BufferOptions) (*Buffer[RowType], err
 		valuesWriter = newCompresser(valuesBuffer, opts.Compression)
 	)
 
-	valuesEnc := newEncoder[RowType](valuesWriter, opts.Encoding)
+	valuesEnc := newEncoder(valuesWriter, opts.Value, opts.Encoding)
 	if valuesEnc == nil {
-		return nil, fmt.Errorf("no encoder available for %s/%s", page.MetadataValueType[RowType](), opts.Encoding)
+		return nil, fmt.Errorf("no encoder available for %s/%s", opts.Value, opts.Encoding)
 	}
 
-	return &Buffer[RowType]{
+	return &Buffer{
 		opts: opts,
 
 		presenceBuffer: presenceBuffer,
@@ -93,9 +96,8 @@ func NewBuffer[RowType page.DataType](opts BufferOptions) (*Buffer[RowType], err
 
 // Append appends a new RowType record into the Buffer. Append returns true if
 // the data was appended; false if the page was full.
-func (buf *Buffer[RowType]) Append(value RowType) bool {
-	var zero RowType
-	if value == zero {
+func (buf *Buffer) Append(value page.Value) bool {
+	if value.IsNil() || value.IsZero() {
 		return buf.AppendNull()
 	}
 
@@ -112,7 +114,7 @@ func (buf *Buffer[RowType]) Append(value RowType) bool {
 
 	// The following calls should never fail; they only return errors if the
 	// underlying writers fail, which ours won't.
-	if err := buf.presenceEnc.Encode(1); err != nil {
+	if err := buf.presenceEnc.Encode(page.Uint64Value(1)); err != nil {
 		panic(fmt.Sprintf("Buffer.Append: encoding presence bitmap entry: %v", err))
 	}
 	if err := buf.valuesEnc.Encode(value); err != nil {
@@ -125,14 +127,14 @@ func (buf *Buffer[RowType]) Append(value RowType) bool {
 
 // AppendNull appends a NULL value to the Buffer. AppendNull returns true if
 // the NULL was appended, or false if the Buffer is full.
-func (buf *Buffer[RowType]) AppendNull() bool {
+func (buf *Buffer) AppendNull() bool {
 	// See comment in Append for why the best we can do is check to see if we're
 	// already full.
 	if buf.EstimatedSize() > buf.opts.PageSizeHint {
 		return false
 	}
 
-	if err := buf.presenceEnc.Encode(0); err != nil {
+	if err := buf.presenceEnc.Encode(page.Uint64Value(0)); err != nil {
 		panic(fmt.Sprintf("Buffer.AppendNull: encoding presence bitmap entry: %v", err))
 	}
 
@@ -141,7 +143,7 @@ func (buf *Buffer[RowType]) AppendNull() bool {
 }
 
 // EstimatedSize returns the estimated size of the Buffer in bytes.
-func (buf *Buffer[RowType]) EstimatedSize() int {
+func (buf *Buffer) EstimatedSize() int {
 	// This estimate doesn't account for the entries in the presence bitmap which
 	// haven't been flushed yet. However, any flush to the presence bitmasp is
 	// generally 2-11 bytes, with the higher end only being from massive RLE
@@ -150,7 +152,7 @@ func (buf *Buffer[RowType]) EstimatedSize() int {
 }
 
 // Rows returns the number of rows appended to the Buffer.
-func (buf *Buffer[RowType]) Rows() int {
+func (buf *Buffer) Rows() int {
 	return buf.rows
 }
 
@@ -159,7 +161,7 @@ func (buf *Buffer[RowType]) Rows() int {
 // To avoid computing useless Stats, the Stats field of the returned Page is
 // unset. If Stats are needed for a Page, callers should compute Stats by
 // iterating over values in the returned Page.
-func (buf *Buffer[RowType]) Flush() (Page, error) {
+func (buf *Buffer) Flush() (Page, error) {
 	if buf.rows == 0 {
 		return Page{}, fmt.Errorf("no data to flush")
 	}
@@ -201,9 +203,9 @@ func (buf *Buffer[RowType]) Flush() (Page, error) {
 		CRC32:            checksum,
 		RowCount:         buf.rows,
 
-		Value:       page.MetadataValueType[RowType](),
+		Value:       buf.opts.Value,
 		Compression: buf.opts.Compression,
-		Encoding:    buf.valuesEnc.Type(),
+		Encoding:    buf.valuesEnc.EncodingType(),
 
 		Data: finalData.Bytes(),
 
@@ -223,7 +225,7 @@ func (buf *Buffer[RowType]) Flush() (Page, error) {
 	return page, nil
 }
 
-func (buf *Buffer[RowType]) reset() {
+func (buf *Buffer) reset() {
 	buf.presenceBuffer.Reset()
 	buf.valuesBuffer.Reset()
 	buf.valuesWriter.Reset(buf.valuesBuffer)

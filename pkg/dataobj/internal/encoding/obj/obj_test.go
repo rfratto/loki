@@ -7,6 +7,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/obj"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
 	"github.com/stretchr/testify/require"
@@ -20,14 +21,15 @@ import (
 func Test(t *testing.T) {
 	opts := dataset.BufferOptions{
 		PageSizeHint: 10,
+		Value:        datasetmd.VALUE_TYPE_STRING,
 		Encoding:     datasetmd.ENCODING_TYPE_PLAIN,
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 	}
 
-	columnFirstName, err := dataset.NewColumn[string]("first_name", opts)
+	columnFirstName, err := dataset.NewColumn("first_name", opts)
 	require.NoError(t, err)
 
-	columnLastName, err := dataset.NewColumn[string]("last_name", opts)
+	columnLastName, err := dataset.NewColumn("last_name", opts)
 	require.NoError(t, err)
 
 	type name struct {
@@ -53,10 +55,10 @@ func Test(t *testing.T) {
 	{
 		for i, pair := range in {
 			if pair.FirstName != "" {
-				require.NoError(t, columnFirstName.Append(i, pair.FirstName))
+				require.NoError(t, columnFirstName.Append(i, page.StringValue(pair.FirstName)))
 			}
 			if pair.LastName != "" {
-				require.NoError(t, columnLastName.Append(i, pair.LastName))
+				require.NoError(t, columnLastName.Append(i, page.StringValue(pair.LastName)))
 			}
 		}
 
@@ -115,14 +117,21 @@ func Test(t *testing.T) {
 			for p, err := range streamsDec.ReadPages(context.TODO(), pages) {
 				require.NoError(t, err)
 
-				for ent, err := range dataset.IterPage[string](rowOffset, p) {
+				for ent, err := range dataset.IterPage(rowOffset, p) {
 					require.NoError(t, err)
+
+					if ent.Value.IsNil() {
+						continue
+					} else if ent.Value.Type() != datasetmd.VALUE_TYPE_STRING {
+						require.Fail(t, "unexpected value type", "row index %d, expected string, got %s", ent.Row, ent.Value.Type())
+						continue
+					}
 
 					switch column.Info.Name {
 					case "first_name":
-						actual[ent.Row].FirstName = ent.Value
+						actual[ent.Row].FirstName = ent.Value.String()
 					case "last_name":
-						actual[ent.Row].LastName = ent.Value
+						actual[ent.Row].LastName = ent.Value.String()
 					}
 				}
 

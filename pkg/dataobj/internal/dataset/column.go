@@ -7,28 +7,28 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
-// A Column holds a sequence of entries of a given Value type. Values are
-// accumulated in a buffer and then flushed to a [Page] once the amount of
+// A Column holds a sequence of [page.Value] entries of a common type. Values
+// are accumulated in a buffer and then flushed to a [Page] once the amount of
 // values exceeds a configurable size.
-type Column[Value page.DataType] struct {
+type Column struct {
 	name string
 	opts BufferOptions
 
 	rows int // Total number of rows in the column.
 
 	pages []Page
-	buf   *Buffer[Value]
+	buf   *Buffer
 }
 
 // NewColumn creates a new Column from the optional name and the provided
 // options. NewColumn returns an error if the options are invalid.
-func NewColumn[Value page.DataType](name string, opts BufferOptions) (*Column[Value], error) {
-	buf, err := NewBuffer[Value](opts)
+func NewColumn(name string, opts BufferOptions) (*Column, error) {
+	buf, err := NewBuffer(opts)
 	if err != nil {
 		return nil, fmt.Errorf("creating buffer: %w", err)
 	}
 
-	return &Column[Value]{
+	return &Column{
 		name: name,
 		opts: opts,
 
@@ -41,7 +41,7 @@ func NewColumn[Value page.DataType](name string, opts BufferOptions) (*Column[Va
 // added up to the new row.
 //
 // Append returns an error if the row number is out of order.
-func (c *Column[Value]) Append(row int, value Value) error {
+func (c *Column) Append(row int, value page.Value) error {
 	if row < c.rows {
 		return fmt.Errorf("row %d is older than current row %d", row, c.rows)
 	}
@@ -65,7 +65,7 @@ func (c *Column[Value]) Append(row int, value Value) error {
 
 // Backfill adds NULLs into Column up to the provided row number. If values
 // exist up to the row number, Backfill does nothing.
-func (c *Column[Value]) Backfill(row int) {
+func (c *Column) Backfill(row int) {
 	// We give two attempts to append the data to the buffer; if the buffer is
 	// full, we cut a page and then append again to the newly reset buffer.
 	//
@@ -81,7 +81,7 @@ func (c *Column[Value]) Backfill(row int) {
 	panic("column.Backfill: failed to append value to fresh buffer")
 }
 
-func (c *Column[Value]) backfill(row int) bool {
+func (c *Column) backfill(row int) bool {
 	for row > c.rows {
 		if !c.buf.AppendNull() {
 			return false
@@ -92,7 +92,7 @@ func (c *Column[Value]) backfill(row int) bool {
 	return true
 }
 
-func (c *Column[Value]) append(row int, value Value) bool {
+func (c *Column) append(row int, value page.Value) bool {
 	for row > c.rows {
 		if !c.buf.AppendNull() {
 			return false
@@ -105,7 +105,7 @@ func (c *Column[Value]) append(row int, value Value) bool {
 
 // Flush flushes the current buffer and stores it as a [Page]. Flush does
 // nothing if there are no rows in the buffer.
-func (c *Column[Value]) Flush() {
+func (c *Column) Flush() {
 	if c.buf.Rows() == 0 {
 		return
 	}
@@ -122,7 +122,7 @@ func (c *Column[Value]) Flush() {
 //
 // Any unflushed data is not included in the returned slice of Pages. To make
 // sure all data is available, call [Column.Flush] before calling Pages.
-func (c *Column[Value]) Pages() []Page {
+func (c *Column) Pages() []Page {
 	return c.pages
 }
 
@@ -147,10 +147,10 @@ type ColumnInfo struct {
 //
 // By default, ColumnInfo.Statistics is nil. Callers must manually compute
 // statistics for columns if needed.
-func (c *Column[Value]) Info() ColumnInfo {
+func (c *Column) Info() ColumnInfo {
 	info := ColumnInfo{
 		Name: c.name,
-		Type: page.MetadataValueType[Value](),
+		Type: c.opts.Value,
 
 		Compression: c.opts.Compression,
 	}

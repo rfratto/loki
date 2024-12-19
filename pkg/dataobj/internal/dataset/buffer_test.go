@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/stretchr/testify/require"
 )
@@ -26,14 +27,15 @@ func TestDataBuffer_String(t *testing.T) {
 
 	opts := dataset.BufferOptions{
 		PageSizeHint: 1024,
+		Value:        datasetmd.VALUE_TYPE_STRING,
 		Compression:  datasetmd.COMPRESSION_TYPE_ZSTD,
 		Encoding:     datasetmd.ENCODING_TYPE_PLAIN,
 	}
-	b, err := dataset.NewBuffer[string](opts)
+	b, err := dataset.NewBuffer(opts)
 	require.NoError(t, err)
 
 	for _, s := range in {
-		require.True(t, b.Append(s))
+		require.True(t, b.Append(page.StringValue(s)))
 	}
 
 	page, err := b.Flush()
@@ -47,14 +49,15 @@ func TestDataBuffer_String(t *testing.T) {
 func TestDataBuffer_Number(t *testing.T) {
 	opts := dataset.BufferOptions{
 		PageSizeHint: 1_500_000,
+		Value:        datasetmd.VALUE_TYPE_INT64,
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
 	}
-	buf, err := dataset.NewBuffer[int64](opts)
+	buf, err := dataset.NewBuffer(opts)
 	require.NoError(t, err)
 
 	ts := time.Now().UTC()
-	for buf.Append(ts.UnixNano()) {
+	for buf.Append(page.Int64Value(ts.UnixNano())) {
 		ts = ts.Add(time.Duration(rand.Intn(5000)) * time.Millisecond)
 	}
 

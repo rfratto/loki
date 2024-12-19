@@ -9,6 +9,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
 // IterPages iterates over all values from the provided iterator of pages. The
@@ -17,17 +18,17 @@ import (
 //
 // Row numbers emitted by IterPagesSlice will be relative to the pages iterated
 // over, and not the entire column.
-func IterPages[Value page.DataType](pageIter iter.Seq2[Page, error]) iter.Seq2[Entry[Value], error] {
-	return func(yield func(Entry[Value], error) bool) {
+func IterPages(pageIter iter.Seq2[Page, error]) iter.Seq2[Entry, error] {
+	return func(yield func(Entry, error) bool) {
 		var row int
 
 		for p, err := range pageIter {
 			if err != nil {
-				yield(Entry[Value]{}, err)
+				yield(Entry{}, err)
 				return
 			}
 
-			for ent, err := range IterPage[Value](row, p) {
+			for ent, err := range IterPage(row, p) {
 				if !yield(ent, err) {
 					return
 				}
@@ -46,12 +47,12 @@ func IterPages[Value page.DataType](pageIter iter.Seq2[Page, error]) iter.Seq2[E
 //
 // Row numbers emitted by IterPagesSlice will be relative to the set of pages
 // provided, not the column.
-func IterPagesSlice[Value page.DataType](pages ...Page) iter.Seq2[Entry[Value], error] {
-	return func(yield func(Entry[Value], error) bool) {
+func IterPagesSlice(pages ...Page) iter.Seq2[Entry, error] {
+	return func(yield func(Entry, error) bool) {
 		var row int
 
 		for _, p := range pages {
-			for ent, err := range IterPage[Value](row, p) {
+			for ent, err := range IterPage(row, p) {
 				if !yield(ent, err) {
 					return
 				}
@@ -69,20 +70,13 @@ func IterPagesSlice[Value page.DataType](pages ...Page) iter.Seq2[Entry[Value], 
 // error is encountered, the iterator emits the error and stops.
 //
 // The row numbers emitted start at rowOffset up to rowOffset+p.RowCount.
-func IterPage[Value page.DataType](rowOffset int, p Page) iter.Seq2[Entry[Value], error] {
+func IterPage(rowOffset int, p Page) iter.Seq2[Entry, error] {
 	row := rowOffset
 
-	return func(yield func(Entry[Value], error) bool) {
-		valueType := page.MetadataValueType[Value]()
-		if valueType != p.Value {
-			err := fmt.Errorf("value type mismatch: expected %s, got %s", valueType, p.Value)
-			yield(Entry[Value]{}, err)
-			return
-		}
-
+	return func(yield func(Entry, error) bool) {
 		presenceReader, valuesReader, err := p.Reader()
 		if err != nil {
-			yield(Entry[Value]{}, fmt.Errorf("opening page for reading: %w", err))
+			yield(Entry{}, fmt.Errorf("opening page for reading: %w", err))
 			return
 		}
 		defer presenceReader.Close()
@@ -90,34 +84,37 @@ func IterPage[Value page.DataType](rowOffset int, p Page) iter.Seq2[Entry[Value]
 
 		var (
 			presenceDec = bitmap.NewDecoder(bufio.NewReader(presenceReader))
-			valuesDec   = newDecoder[Value](bufio.NewReader(valuesReader), p.Encoding)
+			valuesDec   = newDecoder(bufio.NewReader(valuesReader), p.Value, p.Encoding)
 		)
 		if valuesDec == nil {
-			err := fmt.Errorf("no decoder available for %s/%s", valueType, p.Encoding)
-			yield(Entry[Value]{}, err)
+			err := fmt.Errorf("no decoder available for %s/%s", p.Value, p.Encoding)
+			yield(Entry{}, err)
 			return
 		}
 
 		for {
-			var value Value
+			var value page.Value
 
 			present, err := presenceDec.Decode()
 			if errors.Is(err, io.EOF) {
 				return
 			} else if err != nil {
-				yield(Entry[Value]{}, fmt.Errorf("decoding presence bitmap: %w", err))
+				yield(Entry{}, fmt.Errorf("decoding presence bitmap: %w", err))
+				return
+			} else if present.Type() != datasetmd.VALUE_TYPE_UINT64 {
+				yield(Entry{}, fmt.Errorf("invalid presence type: %v", present.Type()))
 				return
 			}
 
-			if present == 1 { // Present; decode the value.
+			if present.Uint64() == 1 { // Present; decode the value.
 				value, err = valuesDec.Decode()
 				if err != nil {
-					yield(Entry[Value]{}, fmt.Errorf("decoding value: %w", err))
+					yield(Entry{}, fmt.Errorf("decoding value: %w", err))
 					return
 				}
 			}
 
-			if !yield(Entry[Value]{Row: row, Value: value}, nil) {
+			if !yield(Entry{Row: row, Value: value}, nil) {
 				return
 			}
 			row++
@@ -126,7 +123,7 @@ func IterPage[Value page.DataType](rowOffset int, p Page) iter.Seq2[Entry[Value]
 }
 
 // Entry is an entry in a page, returned by [IterPage].
-type Entry[Value page.DataType] struct {
-	Row   int   // Row number of the entry.
-	Value Value // Value of the entry.
+type Entry struct {
+	Row   int        // Row number of the entry.
+	Value page.Value // Value of the entry.
 }
