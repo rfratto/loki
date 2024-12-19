@@ -215,3 +215,12 @@ func (ed *entryDecoder) Decode() (ScannerValue, error) {
 		return ScannerValue{}, fmt.Errorf("no decoder available")
 	}
 }
+
+// preloadPages preloads a set of pages in bulk across the following iterators.
+// Pages for which the iterators have yet to fetch for their upcoming row will
+// be retrieved in a batch.
+func preloadPages(ctx context.Context, it ...*columnIter) error {
+	// TODO(rfratto): impl (and use!) this will require moving some additional
+	// state out of the Iter() loop and into the columnIter itself.
+	panic("NYI")
+}
