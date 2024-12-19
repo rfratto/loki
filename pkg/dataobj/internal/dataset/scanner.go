@@ -3,6 +3,7 @@ package dataset
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"iter"
 	"math"
@@ -68,7 +69,13 @@ func NewScanner(columns []*datasetmd.ColumnInfo, getter PageGetter) *Scanner {
 //
 // AddPageFilter returns an error if the listed column was not provided to
 // NewScanner.
-func (*Scanner) AddPageFilter(column *datasetmd.ColumnInfo, include PageFilter) error { panic("NYI") }
+func (s *Scanner) AddPageFilter(column *datasetmd.ColumnInfo, include PageFilter) error {
+	if _, hasColumn := s.columnIndex[column]; !hasColumn {
+		return errors.New("column not in scanner")
+	}
+	s.pageFilters[column] = include
+	return nil
+}
 
 // AddEntryFilter allows for filtering out entries within pages. If an entry is
 // filtered out, the Scanner will skip the row. If reading the remainder of the
@@ -78,7 +85,13 @@ func (*Scanner) AddPageFilter(column *datasetmd.ColumnInfo, include PageFilter) 
 //
 // AddEntryFilter returns an error if the listed column was not provided to
 // NewScanner.
-func (*Scanner) AddEntryFilter(column *datasetmd.ColumnInfo, include EntryFilter) error { panic("NYI") }
+func (s *Scanner) AddEntryFilter(column *datasetmd.ColumnInfo, include EntryFilter) error {
+	if _, hasColumn := s.columnIndex[column]; !hasColumn {
+		return errors.New("column not in scanner")
+	}
+	s.entryFilters[column] = include
+	return nil
+}
 
 // Iter iterates over entries in the Scanner's columns.
 //
