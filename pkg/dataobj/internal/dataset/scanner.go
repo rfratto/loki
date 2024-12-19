@@ -14,6 +14,10 @@ import (
 
 // TODO(rfratto): way more scanner tests. Also can we delete reader.go now? See
 // iter.go for another comment.
+//
+// TODO(rfratto): support a presence column to avoid loading columns
+// unnecessarily. The presence column would be passed to NewScanner separately
+// and it wouldn't emit entries with it.
 
 // A Scanner enables scanning over a set of rows in a dataset. Scanners lazily
 // load columns based on what is being queried and any filters added to the

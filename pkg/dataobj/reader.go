@@ -125,6 +125,9 @@ type EntriesOptions struct {
 // the provided stream. EntriesOptions provides basic filtering options. If an
 // error is encountered, the iterator returns the error and stops.
 func (r *Reader) Entries(ctx context.Context, object string, stream labels.Labels, opts EntriesOptions) iter.Seq2[push.Entry, error] {
+	// TODO(rfratto): change this remove operation on stream; defer that to a
+	// metadata filter.
+
 	// TODO(rfratto): impl
 	dec := decoder.BucketDecoder(r.bucket, object).StreamsDecoder()
 
