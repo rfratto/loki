@@ -89,7 +89,7 @@ type Encoder struct {
 	buf *bitpackBuffer
 }
 
-var _ page.Encoder[uint64] = (*Encoder)(nil)
+var _ page.ValueEncoder = (*Encoder)(nil)
 
 // NewEncoder creates an Encoder that writes encoded numbers to w.
 func NewEncoder(w encoding.Writer) *Encoder {
@@ -99,8 +99,13 @@ func NewEncoder(w encoding.Writer) *Encoder {
 	}
 }
 
-// Type returns [datasetmd.ENCODING_TYPE_BITMAP].
-func (enc *Encoder) Type() datasetmd.EncodingType {
+// ValueType returns [datasetmd.VALUE_TYPE_UINT64].
+func (enc *Encoder) ValueType() datasetmd.ValueType {
+	return datasetmd.VALUE_TYPE_UINT64
+}
+
+// EncodingType returns [datasetmd.ENCODING_TYPE_BITMAP].
+func (enc *Encoder) EncodingType() datasetmd.EncodingType {
 	return datasetmd.ENCODING_TYPE_BITMAP
 }
 
@@ -111,14 +116,19 @@ func (enc *Encoder) Type() datasetmd.EncodingType {
 // fails.
 //
 // Call [Encoder.Flush] to end the run and flush any remaining values.
-func (enc *Encoder) Encode(v uint64) error {
+func (enc *Encoder) Encode(v page.Value) error {
+	if v.Type() != datasetmd.VALUE_TYPE_UINT64 {
+		return fmt.Errorf("invalid value type %s", v.Type())
+	}
+	uv := v.Uint64()
+
 	switch {
 	case enc.runLength == 0 && enc.setSize == 0: // Start a new run.
-		enc.runValue = v
+		enc.runValue = uv
 		enc.runLength = 1
 		return nil
 
-	case enc.runLength > 0 && v == enc.runValue: // Continue the run.
+	case enc.runLength > 0 && uv == enc.runValue: // Continue the run.
 		enc.runLength++
 
 		// If we hit the maximum run length, we'll flush the run immediately.
@@ -127,7 +137,7 @@ func (enc *Encoder) Encode(v uint64) error {
 		}
 		return nil
 
-	case enc.runLength > 0 && v != enc.runValue:
+	case enc.runLength > 0 && uv != enc.runValue:
 		// The run ended. If the run lasted less than 8 values, we switch to
 		// bitpacking. Copy over the old run value and add the new value.
 		if enc.runLength < 8 {
@@ -137,7 +147,7 @@ func (enc *Encoder) Encode(v uint64) error {
 			}
 
 			enc.runLength = 0
-			enc.set[enc.setSize] = v
+			enc.set[enc.setSize] = uv
 			enc.setSize++
 
 			if enc.setSize == 8 {
@@ -154,12 +164,12 @@ func (enc *Encoder) Encode(v uint64) error {
 		}
 
 		// Start a new run.
-		enc.runValue = v
+		enc.runValue = uv
 		enc.runLength = 1
 		return nil
 
 	case enc.setSize > 0:
-		enc.set[enc.setSize] = v
+		enc.set[enc.setSize] = uv
 		enc.setSize++
 
 		if enc.setSize == 8 {
@@ -380,7 +390,7 @@ type Decoder struct {
 	set      []byte // Current set of bit-packed values.
 }
 
-var _ page.Decoder[uint64] = (*Decoder)(nil)
+var _ page.ValueDecoder = (*Decoder)(nil)
 
 // NewDecoder creates a Decoder that reads encoded numbers from r. The width
 // argument specifies the maximum number of bits to use for each value.
@@ -389,31 +399,36 @@ func NewDecoder(r encoding.Reader) *Decoder {
 	return &Decoder{r: r}
 }
 
-// Type returns [datasetmd.ENCODING_TYPE_BITMAP].
-func (dec *Decoder) Type() datasetmd.EncodingType {
+// ValueType returns [datasetmd.VALUE_TYPE_UINT64].
+func (dec *Decoder) ValueType() datasetmd.ValueType {
+	return datasetmd.VALUE_TYPE_UINT64
+}
+
+// EncodingType returns [datasetmd.ENCODING_TYPE_BITMAP].
+func (dec *Decoder) EncodingType() datasetmd.EncodingType {
 	return datasetmd.ENCODING_TYPE_BITMAP
 }
 
 // Decode reads the next value from the decoder.
-func (dec *Decoder) Decode() (uint64, error) {
+func (dec *Decoder) Decode() (page.Value, error) {
 	// See comment in [Decoder] for the state machine.
 
 NextState:
 	switch {
 	case dec.runLength == 0 && dec.sets == 0 && dec.setSize == 0: // READY
 		if err := dec.readHeader(); err != nil {
-			return 0, fmt.Errorf("reading header: %w", err)
+			return page.Uint64Value(0), fmt.Errorf("reading header: %w", err)
 		}
 		goto NextState
 
 	case dec.runLength > 0: // RLE
 		dec.runLength--
-		return dec.runValue, nil
+		return page.Uint64Value(dec.runValue), nil
 
 	case dec.sets > 0 && dec.setSize == 0: // BITPACK-READY
 		// BITPACK-READY; load the next bitpack set.
 		if err := dec.nextBitpackSet(); err != nil {
-			return 0, err
+			return page.Uint64Value(0), err
 		}
 		goto NextState
 
@@ -433,7 +448,7 @@ NextState:
 		}
 
 		dec.setSize--
-		return val, nil
+		return page.Uint64Value(val), nil
 	default:
 		panic("rle: invalid state")
 	}

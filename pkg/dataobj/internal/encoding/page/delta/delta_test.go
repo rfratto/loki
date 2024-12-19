@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/delta"
 	"github.com/stretchr/testify/require"
 )
@@ -33,14 +34,14 @@ func Fuzz(f *testing.F) {
 		for i := 0; i < count; i++ {
 			v := rnd.Int63()
 			numbers = append(numbers, v)
-			require.NoError(t, enc.Encode(v))
+			require.NoError(t, enc.Encode(page.Int64Value(v)))
 		}
 
 		var actual []int64
 		for i := 0; i < count; i++ {
 			v, err := dec.Decode()
 			require.NoError(t, err)
-			actual = append(actual, v)
+			actual = append(actual, v.Int64())
 		}
 
 		require.Equal(t, numbers, actual)
@@ -53,7 +54,7 @@ func Benchmark_Encoder_Encode(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(int64(i))
+			_ = enc.Encode(page.Int64Value(int64(i)))
 		}
 	})
 
@@ -63,9 +64,9 @@ func Benchmark_Encoder_Encode(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			if i%2 == 0 {
-				_ = enc.Encode(0)
+				_ = enc.Encode(page.Int64Value(0))
 			} else {
-				_ = enc.Encode(math.MaxInt64)
+				_ = enc.Encode(page.Int64Value(math.MaxInt64))
 			}
 		}
 	})
@@ -77,7 +78,7 @@ func Benchmark_Encoder_Encode(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(rnd.Int63())
+			_ = enc.Encode(page.Int64Value(rnd.Int63()))
 		}
 	})
 }
@@ -92,7 +93,7 @@ func Benchmark_Encoder_Decode(b *testing.B) {
 		)
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(int64(i))
+			_ = enc.Encode(page.Int64Value(int64(i)))
 		}
 
 		b.ResetTimer()
@@ -111,9 +112,9 @@ func Benchmark_Encoder_Decode(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			if i%2 == 0 {
-				_ = enc.Encode(0)
+				_ = enc.Encode(page.Int64Value(0))
 			} else {
-				_ = enc.Encode(math.MaxInt64)
+				_ = enc.Encode(page.Int64Value(math.MaxInt64))
 			}
 		}
 
@@ -134,7 +135,7 @@ func Benchmark_Encoder_Decode(b *testing.B) {
 		)
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(rnd.Int63())
+			_ = enc.Encode(page.Int64Value(rnd.Int63()))
 		}
 
 		b.ResetTimer()
@@ -160,14 +161,14 @@ func Test(t *testing.T) {
 	)
 
 	for _, num := range numbers {
-		require.NoError(t, enc.Encode(num))
+		require.NoError(t, enc.Encode(page.Int64Value(num)))
 	}
 
 	var actual []int64
 	for range len(numbers) {
 		v, err := dec.Decode()
 		require.NoError(t, err)
-		actual = append(actual, v)
+		actual = append(actual, v.Int64())
 	}
 
 	require.Equal(t, numbers, actual)

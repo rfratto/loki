@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +42,7 @@ func Fuzz(f *testing.F) {
 
 			v := uint64(rnd.Int63()) & mask
 			numbers = append(numbers, v)
-			require.NoError(t, enc.Encode(v))
+			require.NoError(t, enc.Encode(page.Uint64Value(v)))
 		}
 		require.NoError(t, enc.Flush())
 
@@ -49,7 +50,7 @@ func Fuzz(f *testing.F) {
 		for i := 0; i < count; i++ {
 			v, err := dec.Decode()
 			require.NoError(t, err)
-			actual = append(actual, v)
+			actual = append(actual, v.Uint64())
 		}
 
 		require.Equal(t, numbers, actual)
@@ -73,7 +74,7 @@ func benchmark_Encoder_Encode(b *testing.B, width int) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(1)
+			_ = enc.Encode(page.Uint64Value(1))
 		}
 		_ = enc.Flush()
 
@@ -86,7 +87,7 @@ func benchmark_Encoder_Encode(b *testing.B, width int) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(uint64(i % width))
+			_ = enc.Encode(page.Uint64Value(uint64(i % width)))
 		}
 		_ = enc.Flush()
 
@@ -101,7 +102,7 @@ func benchmark_Encoder_Encode(b *testing.B, width int) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(uint64(rnd.Int63()) % uint64(width))
+			_ = enc.Encode(page.Uint64Value(uint64(rnd.Int63()) % uint64(width)))
 		}
 		_ = enc.Flush()
 
@@ -128,7 +129,7 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		)
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(1)
+			_ = enc.Encode(page.Uint64Value(1))
 		}
 		_ = enc.Flush()
 
@@ -147,7 +148,7 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		)
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(uint64(i % width))
+			_ = enc.Encode(page.Uint64Value(uint64(i % width)))
 		}
 		_ = enc.Flush()
 
@@ -167,7 +168,7 @@ func benchmark_Encoder_Decode(b *testing.B, width int) {
 		)
 
 		for i := 0; i < b.N; i++ {
-			_ = enc.Encode(uint64(rnd.Int63()) % uint64(width))
+			_ = enc.Encode(page.Uint64Value(uint64(rnd.Int63()) % uint64(width)))
 		}
 		_ = enc.Flush()
 
@@ -203,7 +204,7 @@ func Test(t *testing.T) {
 
 	count := 1500
 	for i := 0; i < count; i++ {
-		require.NoError(t, enc.Encode(uint64(1)))
+		require.NoError(t, enc.Encode(page.Uint64Value(uint64(1))))
 	}
 	require.NoError(t, enc.Flush())
 
@@ -212,7 +213,7 @@ func Test(t *testing.T) {
 	for range count {
 		v, err := dec.Decode()
 		require.NoError(t, err)
-		require.Equal(t, uint64(1), v)
+		require.Equal(t, uint64(1), v.Uint64())
 	}
 }
 
@@ -226,7 +227,7 @@ func Test_Bitpacking(t *testing.T) {
 
 	expect := []uint64{0, 1, 2, 3, 4, 5, 6, 7}
 	for _, v := range expect {
-		require.NoError(t, enc.Encode(v))
+		require.NoError(t, enc.Encode(page.Uint64Value(v)))
 	}
 	require.NoError(t, enc.Flush())
 
@@ -234,7 +235,7 @@ func Test_Bitpacking(t *testing.T) {
 	for range len(expect) {
 		v, err := dec.Decode()
 		require.NoError(t, err)
-		actual = append(actual, v)
+		actual = append(actual, v.Uint64())
 	}
 	require.NoError(t, enc.Flush())
 
@@ -251,7 +252,7 @@ func Test_Bitpacking_Partial(t *testing.T) {
 
 	expect := []uint64{0, 1, 2, 3, 4}
 	for _, v := range expect {
-		require.NoError(t, enc.Encode(v))
+		require.NoError(t, enc.Encode(page.Uint64Value(v)))
 	}
 	require.NoError(t, enc.Flush())
 
@@ -259,7 +260,7 @@ func Test_Bitpacking_Partial(t *testing.T) {
 	for range len(expect) {
 		v, err := dec.Decode()
 		require.NoError(t, err)
-		actual = append(actual, v)
+		actual = append(actual, v.Uint64())
 	}
 
 	require.Equal(t, expect, actual)

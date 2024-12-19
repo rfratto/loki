@@ -3,6 +3,8 @@
 package delta
 
 import (
+	"fmt"
+
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
@@ -15,7 +17,7 @@ type Encoder struct {
 	prev int64
 }
 
-var _ page.Encoder[int64] = (*Encoder)(nil)
+var _ page.ValueEncoder = (*Encoder)(nil)
 
 // NewEncoder creates an Encoder that writes encoded numbers to w.
 func NewEncoder(w encoding.Writer) *Encoder {
@@ -24,15 +26,25 @@ func NewEncoder(w encoding.Writer) *Encoder {
 	return &enc
 }
 
-// Type returns [datasetmd.ENCODING_TYPE_DELTA].
-func (enc *Encoder) Type() datasetmd.EncodingType {
+// ValueType returns [datasetmd.VALUE_TYPE_INT64].
+func (enc *Encoder) ValueType() datasetmd.ValueType {
+	return datasetmd.VALUE_TYPE_INT64
+}
+
+// EncodingType returns [datasetmd.ENCODING_TYPE_DELTA].
+func (enc *Encoder) EncodingType() datasetmd.EncodingType {
 	return datasetmd.ENCODING_TYPE_DELTA
 }
 
 // Encode encodes a new value.
-func (enc *Encoder) Encode(v int64) error {
-	delta := v - enc.prev
-	enc.prev = v
+func (enc *Encoder) Encode(v page.Value) error {
+	if v.Type() != datasetmd.VALUE_TYPE_INT64 {
+		return fmt.Errorf("delta: invalid value type %v", v.Type())
+	}
+	iv := v.Int64()
+
+	delta := iv - enc.prev
+	enc.prev = iv
 	return encoding.WriteVarint(enc.w, delta)
 }
 
@@ -54,7 +66,7 @@ type Decoder struct {
 	prev int64
 }
 
-var _ page.Decoder[int64] = (*Decoder)(nil)
+var _ page.ValueDecoder = (*Decoder)(nil)
 
 // NewDecoder creates a Decoder that reads encoded numbers from r.
 func NewDecoder(r encoding.Reader) *Decoder {
@@ -63,20 +75,25 @@ func NewDecoder(r encoding.Reader) *Decoder {
 	return &dec
 }
 
+// ValueType returns [datasetmd.VALUE_TYPE_INT64].
+func (dec *Decoder) ValueType() datasetmd.ValueType {
+	return datasetmd.VALUE_TYPE_INT64
+}
+
 // Type returns [datasetmd.ENCODING_TYPE_DELTA].
-func (dec *Decoder) Type() datasetmd.EncodingType {
+func (dec *Decoder) EncodingType() datasetmd.EncodingType {
 	return datasetmd.ENCODING_TYPE_DELTA
 }
 
 // Decode decodes the next value.
-func (dec *Decoder) Decode() (int64, error) {
+func (dec *Decoder) Decode() (page.Value, error) {
 	delta, err := encoding.ReadVarint(dec.r)
 	if err != nil {
-		return 0, err
+		return page.Int64Value(dec.prev), err
 	}
 
 	dec.prev += delta
-	return dec.prev, nil
+	return page.Int64Value(dec.prev), nil
 }
 
 // Reset resets the decoder to its initial state.

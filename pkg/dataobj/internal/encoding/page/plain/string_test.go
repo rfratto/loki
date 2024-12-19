@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/plain"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +25,7 @@ func Benchmark_Append(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for _, v := range testStrings {
-			_ = enc.Encode(v)
+			_ = enc.Encode(page.StringValue(v))
 		}
 	}
 }
@@ -38,7 +39,7 @@ func Benchmark_Decode(b *testing.B) {
 	)
 
 	for _, v := range testStrings {
-		enc.Encode(v)
+		enc.Encode(page.StringValue(v))
 	}
 
 	b.ResetTimer()
@@ -64,7 +65,7 @@ func Test(t *testing.T) {
 	)
 
 	for _, v := range testStrings {
-		require.NoError(t, enc.Encode(v))
+		require.NoError(t, enc.Encode(page.StringValue(v)))
 	}
 
 	var out []string
@@ -76,7 +77,7 @@ func Test(t *testing.T) {
 		} else if err != nil {
 			t.Fatal(err)
 		}
-		out = append(out, string(str))
+		out = append(out, str.String())
 	}
 
 	require.Equal(t, testStrings, out)
