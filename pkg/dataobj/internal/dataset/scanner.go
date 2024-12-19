@@ -12,6 +12,9 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
+// TODO(rfratto): way more scanner tests. Also can we delete reader.go now? See
+// iter.go for another comment.
+
 // A Scanner enables scanning over a set of rows in a dataset. Scanners lazily
 // load columns based on what is being queried and any filters added to the
 // Scanner.
