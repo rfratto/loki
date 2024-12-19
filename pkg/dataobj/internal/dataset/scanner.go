@@ -240,12 +240,19 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 
 	NextRow:
 		for row := startRow; row < s.totalRows; row++ {
+			// TODO(rfratto): it's a bit weird for the row to be repeated in every
+			// scanner entry emited. Maybe we want a RowEntry type instead?
 			rowEntries := make([]ScannerEntry, len(s.columns)) // Each index corresponds to the index in s.columns.
 
 			for _, column := range orderedColumns {
 				columnIndex := s.columnIndex[column] // Index to fill in rowEntries
 
 				// Lazily get the column iter.
+				//
+				// TODO(rfratto): if we're done using entry filters for the row, we
+				// might want to consider batching page gets across all remaining
+				// columns (if pages need to be retrieved). That way we pull multiple
+				// pages at once and minimize GET calls.
 				columnIter, err := getColumnIter(column)
 				if err != nil {
 					yield(nil, err)
