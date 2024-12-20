@@ -1,14 +1,10 @@
 package dataset
 
 import (
-	"bufio"
 	"errors"
-	"fmt"
-	"io"
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"golang.org/x/net/context"
 )
@@ -108,44 +104,15 @@ func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.Pa
 	p := page.Raw(column.ValueType, pageInfo, data)
 
 	return func(yield func(ScannerEntry, error) bool) {
-		presenceReader, valuesReader, err := p.Reader()
-		if err != nil {
-			yield(ScannerEntry{}, fmt.Errorf("opening page for reading: %w", err))
-			return
-		}
-		defer presenceReader.Close()
-		defer valuesReader.Close()
-
-		presenceDec := bitmap.NewDecoder(bufio.NewReader(presenceReader))
-		valuesDec, ok := page.NewValueDecoder(column.ValueType, p.Encoding, bufio.NewReader(valuesReader))
-		if !ok {
-			yield(ScannerEntry{}, fmt.Errorf("no decoder available for %s/%s", column.ValueType, p.Encoding))
-			return
-		}
-
 		row := startRow
-		for {
-			entry := ScannerEntry{Row: row}
 
-			present, err := presenceDec.Decode()
-			if errors.Is(err, io.EOF) {
-				return
-			} else if err != nil {
-				yield(entry, fmt.Errorf("decoding presence: %w", err))
-				return
-			} else if present.Type() != datasetmd.VALUE_TYPE_UINT64 {
-				yield(entry, fmt.Errorf("invalid presence type: %v", present.Type()))
+		for val, err := range page.Iter(p) {
+			if err != nil {
+				yield(ScannerEntry{}, err)
 				return
 			}
 
-			if present.Uint64() == 1 {
-				value, err := valuesDec.Decode()
-				if err != nil {
-					yield(entry, fmt.Errorf("decoding value: %w", err))
-				}
-				entry.Value = value
-			}
-
+			entry := ScannerEntry{Row: row, Value: val}
 			if !yield(entry, nil) {
 				return
 			}
