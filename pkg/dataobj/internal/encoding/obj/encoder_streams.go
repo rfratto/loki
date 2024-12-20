@@ -6,6 +6,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
 )
@@ -158,7 +159,7 @@ type StreamsColumnEncoder struct {
 
 // AppendPage appends a new page to the column. AppendPage fails if the column
 // has been closed.
-func (enc *StreamsColumnEncoder) AppendPage(page dataset.Page) error {
+func (enc *StreamsColumnEncoder) AppendPage(page page.Page) error {
 	if enc.closed {
 		return ErrClosed
 	}

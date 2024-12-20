@@ -9,6 +9,7 @@ import (
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
@@ -93,19 +94,19 @@ func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, column *streamsmd.
 	return res, nil
 }
 
-func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*ColumnPageDesc) iter.Seq2[dataset.Page, error] {
-	readPage := func(column *streamsmd.ColumnDesc, page *streamsmd.PageDesc) (dataset.Page, error) {
-		if _, err := dec.r.Seek(int64(page.Info.DataOffset), io.SeekStart); err != nil {
-			return dataset.Page{}, err
+func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*ColumnPageDesc) iter.Seq2[page.Page, error] {
+	readPage := func(column *streamsmd.ColumnDesc, pageDesc *streamsmd.PageDesc) (page.Page, error) {
+		if _, err := dec.r.Seek(int64(pageDesc.Info.DataOffset), io.SeekStart); err != nil {
+			return page.Page{}, err
 		}
-		data := make([]byte, page.Info.DataSize)
+		data := make([]byte, pageDesc.Info.DataSize)
 		if _, err := io.ReadFull(dec.r, data); err != nil {
-			return dataset.Page{}, fmt.Errorf("read page data: %w", err)
+			return page.Page{}, fmt.Errorf("read page data: %w", err)
 		}
-		return dataset.RawPage(column.Info, page.Info, data), nil
+		return page.Raw(column.Info.ValueType, pageDesc.Info, data), nil
 	}
 
-	return func(yield func(dataset.Page, error) bool) {
+	return func(yield func(page.Page, error) bool) {
 		for _, pageDesc := range pages {
 			page, err := readPage(pageDesc.Column, pageDesc.Page)
 			if !yield(page, err) {
@@ -140,8 +141,8 @@ func (dec *readSeekerDatasetDecoder) ColumnPages(ctx context.Context, column *da
 	return res, nil
 }
 
-func (dec *readSeekerDatasetDecoder) ReadPages(ctx context.Context, pages []*datasetmd.PageInfo) ([]dataset.PageData, error) {
-	res := make([]dataset.PageData, 0, len(pages))
+func (dec *readSeekerDatasetDecoder) ReadPages(ctx context.Context, pages []*datasetmd.PageInfo) ([]page.Data, error) {
+	res := make([]page.Data, 0, len(pages))
 	for _, pageToRead := range pages {
 		if _, err := dec.r.Seek(int64(pageToRead.DataOffset), io.SeekStart); err != nil {
 			return nil, err

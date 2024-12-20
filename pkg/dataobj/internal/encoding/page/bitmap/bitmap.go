@@ -57,6 +57,17 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
+func init() {
+	// Register the encoding to the page package so instances of it can be
+	// dynamically created.
+	page.RegisterValueEncoding(
+		datasetmd.VALUE_TYPE_UINT64,
+		datasetmd.ENCODING_TYPE_BITMAP,
+		func(w encoding.Writer) page.ValueEncoder { return NewEncoder(w) },
+		func(r encoding.Reader) page.ValueDecoder { return NewDecoder(r) },
+	)
+}
+
 const maxRunLength uint64 = 1<<63 - 1 // 2^63-1
 
 // An Encoder encodes uint64s to a hybrid run-length encoded format.

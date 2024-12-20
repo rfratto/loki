@@ -10,6 +10,17 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
+func init() {
+	// Register the encoding to the page package so instances of it can be
+	// dynamically created.
+	page.RegisterValueEncoding(
+		datasetmd.VALUE_TYPE_STRING,
+		datasetmd.ENCODING_TYPE_PLAIN,
+		func(w encoding.Writer) page.ValueEncoder { return NewStringEncoder(w) },
+		func(r encoding.Reader) page.ValueDecoder { return NewStringDecoder(r) },
+	)
+}
+
 // StringEncoder encodes strings to an [encoding.Writer].
 type StringEncoder struct {
 	w encoding.Writer

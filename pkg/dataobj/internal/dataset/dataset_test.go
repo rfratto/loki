@@ -24,7 +24,7 @@ func Test(t *testing.T) {
 		"goodbye",
 	}
 
-	column, err := dataset.NewColumn("", dataset.BufferOptions{
+	column, err := dataset.NewColumn("", page.BuilderOptions{
 		// We want to set page size hint low enough to create more than one page,
 		// but high enough that we'll have pages with more than one row.
 		PageSizeHint: 10,
@@ -53,20 +53,22 @@ func Test(t *testing.T) {
 	// That way, in == actual if and only if the row numbers were correct.
 	actual := make([]string, len(in))
 
-	for ent, err := range dataset.IterPagesSlice(column.Pages()...) {
-		assert.NoError(t, err)
+	var row int
 
-		if ent.Value.IsNil() {
-			continue // Skip over empty entries.
-		} else if ent.Row >= len(actual) {
-			assert.Fail(t, "row index out of bounds", "row index %d, expected < %d", ent.Row, len(actual))
-			continue
-		} else if ent.Value.Type() != datasetmd.VALUE_TYPE_STRING {
-			assert.Fail(t, "unexpected value type", "row index %d, expected string, got %s", ent.Row, ent.Value.Type())
-			continue
+	for _, p := range column.Pages() {
+		for val, err := range page.Iter(p) {
+			require.NoError(t, err)
+
+			if !val.IsNil() && val.Type() != datasetmd.VALUE_TYPE_STRING {
+				assert.Fail(t, "unexpected value type", "row index %d, expected string, got %s", row, val.Type())
+				continue
+			}
+
+			if !val.IsNil() {
+				actual[row] = val.String()
+			}
+			row++
 		}
-
-		actual[ent.Row] = ent.Value.String()
 	}
 
 	require.Equal(t, in, actual)

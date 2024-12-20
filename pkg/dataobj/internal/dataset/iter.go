@@ -7,12 +7,13 @@ import (
 	"io"
 	"iter"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"golang.org/x/net/context"
 )
 
-// columnIter iterates over entries in a column by lazily loading pages on
+// columnIter iterates over entries in a column, lazily loading pages on
 // demand.
 type columnIter struct {
 	column     *datasetmd.ColumnInfo
@@ -49,7 +50,7 @@ func (it *columnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
 	return func(yield func(ScannerEntry, error) bool) {
 		var (
 			curPage     *datasetmd.PageInfo
-			curPageData PageData
+			curPageData page.Data
 		)
 
 	NextPage:
@@ -103,8 +104,8 @@ func (it *columnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
 	}
 }
 
-func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.PageInfo, data PageData) iter.Seq2[ScannerEntry, error] {
-	p := RawPage(column, pageInfo, data)
+func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.PageInfo, data page.Data) iter.Seq2[ScannerEntry, error] {
+	p := page.Raw(column.ValueType, pageInfo, data)
 
 	return func(yield func(ScannerEntry, error) bool) {
 		presenceReader, valuesReader, err := p.Reader()
@@ -116,9 +117,9 @@ func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.Pa
 		defer valuesReader.Close()
 
 		presenceDec := bitmap.NewDecoder(bufio.NewReader(presenceReader))
-		valuesDec := newDecoder(bufio.NewReader(valuesReader), column.ValueType, p.Encoding)
-		if valuesDec == nil {
-			yield(ScannerEntry{}, fmt.Errorf("no decoder available: %w", err))
+		valuesDec, ok := page.NewValueDecoder(column.ValueType, p.Encoding, bufio.NewReader(valuesReader))
+		if !ok {
+			yield(ScannerEntry{}, fmt.Errorf("no decoder available for %s/%s", column.ValueType, p.Encoding))
 			return
 		}
 

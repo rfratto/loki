@@ -5,6 +5,7 @@ import (
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
 )
@@ -38,7 +39,7 @@ type (
 		// ReadPages reads the provided set of pages, iterating over their data
 		// matching the argument order. If an error is encountered while retrieving
 		// pages, an error is emitted and iteration stops.
-		ReadPages(ctx context.Context, pages []*ColumnPageDesc) iter.Seq2[dataset.Page, error]
+		ReadPages(ctx context.Context, pages []*ColumnPageDesc) iter.Seq2[page.Page, error]
 	}
 )
 

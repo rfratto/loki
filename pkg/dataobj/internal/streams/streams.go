@@ -83,7 +83,7 @@ func (s *Streams) getOrAddStream(streamLabels labels.Labels) *Stream {
 //
 // Streams are encoded in the order they were first appended.
 func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
-	minTimestampColumn, err := dataset.NewColumn("", dataset.BufferOptions{
+	minTimestampColumn, err := dataset.NewColumn("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -93,7 +93,7 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating minimum timestamp column: %w", err)
 	}
 
-	maxTimestampColumn, err := dataset.NewColumn("", dataset.BufferOptions{
+	maxTimestampColumn, err := dataset.NewColumn("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -103,7 +103,7 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating maximum timestamp column: %w", err)
 	}
 
-	recordsCountColumn, err := dataset.NewColumn("", dataset.BufferOptions{
+	recordsCountColumn, err := dataset.NewColumn("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -124,7 +124,7 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 			return labelColumns[idx], nil
 		}
 
-		labelColumn, err := dataset.NewColumn(name, dataset.BufferOptions{
+		labelColumn, err := dataset.NewColumn(name, page.BuilderOptions{
 			PageSizeHint: pageSize,
 			Value:        datasetmd.VALUE_TYPE_STRING,
 			Encoding:     datasetmd.ENCODING_TYPE_PLAIN,

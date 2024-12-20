@@ -53,7 +53,7 @@ func iterSection(ctx context.Context, dec obj.StreamsDecoder, section *filemd.Se
 			return
 		}
 
-		scanner := dataset.NewScanner(columnInfos(columns), dec.DatasetDecoder())
+		scanner := dataset.NewScanner(streamsmd.ColumnInfos(columns), dec.DatasetDecoder())
 		for rowEntry, err := range scanner.Iter(ctx) {
 			if err != nil {
 				yield(Stream{}, err)
@@ -108,12 +108,4 @@ func decodeRow(columns []*streamsmd.ColumnDesc, row []dataset.ScannerEntry) (Str
 	}
 
 	return stream, nil
-}
-
-func columnInfos(in []*streamsmd.ColumnDesc) []*datasetmd.ColumnInfo {
-	res := make([]*datasetmd.ColumnInfo, len(in))
-	for i, d := range in {
-		res[i] = d.Info
-	}
-	return res
 }

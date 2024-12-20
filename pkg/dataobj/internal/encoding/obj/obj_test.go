@@ -19,7 +19,7 @@ import (
 //  2. Create a data object composed of those two columns.
 //  3. Read back the columns and assert it against the original data.
 func Test(t *testing.T) {
-	opts := dataset.BufferOptions{
+	opts := page.BuilderOptions{
 		PageSizeHint: 10,
 		Value:        datasetmd.VALUE_TYPE_STRING,
 		Encoding:     datasetmd.ENCODING_TYPE_PLAIN,
@@ -108,34 +108,21 @@ func Test(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, columns, 2)
 
-		for _, column := range columns {
-			pages, err := streamsDec.Pages(context.TODO(), column)
+		scan := dataset.NewScanner(streamsmd.ColumnInfos(columns), streamsDec.DatasetDecoder())
+		for rowEntry, err := range scan.Iter(context.TODO()) {
 			require.NoError(t, err)
 
-			rowOffset := 0
-
-			for p, err := range streamsDec.ReadPages(context.TODO(), pages) {
-				require.NoError(t, err)
-
-				for ent, err := range dataset.IterPage(rowOffset, p) {
-					require.NoError(t, err)
-
-					if ent.Value.IsNil() {
-						continue
-					} else if ent.Value.Type() != datasetmd.VALUE_TYPE_STRING {
-						require.Fail(t, "unexpected value type", "row index %d, expected string, got %s", ent.Row, ent.Value.Type())
-						continue
-					}
-
-					switch column.Info.Name {
-					case "first_name":
-						actual[ent.Row].FirstName = ent.Value.String()
-					case "last_name":
-						actual[ent.Row].LastName = ent.Value.String()
-					}
+			for i, colEntry := range rowEntry {
+				if colEntry.Value.IsNil() {
+					continue
 				}
 
-				rowOffset += p.RowCount
+				switch columns[i].Info.Name {
+				case "first_name":
+					actual[colEntry.Row].FirstName = colEntry.Value.String()
+				case "last_name":
+					actual[colEntry.Row].LastName = colEntry.Value.String()
+				}
 			}
 		}
 	}

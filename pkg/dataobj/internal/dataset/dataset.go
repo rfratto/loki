@@ -3,90 +3,173 @@
 package dataset
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
-	"hash/crc32"
-	"io"
 
-	"github.com/golang/snappy"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
-	"github.com/klauspost/compress/zstd"
+
+	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/all" // Import encoders
 )
 
-var (
-	checksumTable = crc32.MakeTable(crc32.Castagnoli)
-)
+// A Column holds a sequence of [page.Value] entries of a common type. Values
+// are accumulated in a buffer and then flushed to a [Page] once the amount of
+// values exceeds a configurable size.
+type Column struct {
+	name string
+	opts page.BuilderOptions
 
-// PageData holds compressed and encoded page data.
-type PageData []byte
+	rows int // Total number of rows in the column.
 
-// A Page is a single unit of data within a column. It is encoded with a
-// specific format and is optionally compressed.
-type Page struct {
-	UncompressedSize int    // UncompressedSize is the size of the page before compression.
-	CompressedSize   int    // CompressedSize is the size of the page after compression.
-	CRC32            uint32 // CRC32 is the CRC32 checksum of the compressed page.
-	RowCount         int    // RowCount is the number of rows in the page.
-
-	Value       datasetmd.ValueType       // Value type of the page.
-	Compression datasetmd.CompressionType // Compression used for the compressed page.
-	Encoding    datasetmd.EncodingType    // Encoding used for the decompressed page.
-	Stats       *datasetmd.Statistics     // Optional statistics for the page.
-
-	Data PageData // Data for the page.
+	pages   []page.Page
+	builder *page.Builder
 }
 
-// RawPage converts metadata and raw data into a Page. The arguments are not
-// validated to be correct.
-func RawPage(column *datasetmd.ColumnInfo, page *datasetmd.PageInfo, data PageData) Page {
-	return Page{
-		UncompressedSize: int(page.UncompressedSize),
-		CompressedSize:   int(page.CompressedSize),
-		CRC32:            uint32(page.Crc32),
-		RowCount:         int(page.RowsCount),
-
-		Value:       column.ValueType,
-		Compression: page.Compression,
-		Encoding:    page.Encoding,
-		Stats:       page.Statistics,
-
-		Data: data,
+// NewColumn creates a new Column from the optional name and the provided
+// options. NewColumn returns an error if the options are invalid.
+func NewColumn(name string, opts page.BuilderOptions) (*Column, error) {
+	builder, err := page.NewBuilder(opts)
+	if err != nil {
+		return nil, fmt.Errorf("creating buffer: %w", err)
 	}
+
+	return &Column{
+		name: name,
+		opts: opts,
+
+		builder: builder,
+	}, nil
 }
 
-// Reader returns a reader for decompressed page data. Reader returns an error
-// if the CRC32 fails to validate.
-func (p *Page) Reader() (presence io.ReadCloser, values io.ReadCloser, err error) {
-	if actual := crc32.Checksum(p.Data, checksumTable); p.CRC32 != actual {
-		return nil, nil, fmt.Errorf("invalid crc32 checksum %x, expected %x", actual, p.CRC32)
+// Append adds a new value to the Column with the given row value. If the row
+// number is more than the current number of rows in the Column, nulls are
+// added up to the new row.
+//
+// Append returns an error if the row number is out of order.
+func (c *Column) Append(row int, value page.Value) error {
+	if row < c.rows {
+		return fmt.Errorf("row %d is older than current row %d", row, c.rows)
 	}
 
-	// The first thing written to the page is the presence bitmap size.
-	bitmapSize, n := binary.Uvarint(p.Data)
-	if n <= 0 {
-		return nil, nil, fmt.Errorf("reading presence bitmap size: %w", err)
-	}
-
-	bitmapReader := bytes.NewReader(p.Data[n : n+int(bitmapSize)])
-	dataReader := bytes.NewReader(p.Data[n+int(bitmapSize):])
-
-	// The rest of the page is the values.
-	switch p.Compression {
-	case datasetmd.COMPRESSION_TYPE_UNSPECIFIED, datasetmd.COMPRESSION_TYPE_NONE:
-		return io.NopCloser(bitmapReader), io.NopCloser(dataReader), nil
-
-	case datasetmd.COMPRESSION_TYPE_SNAPPY:
-		sr := snappy.NewReader(dataReader)
-		return io.NopCloser(bitmapReader), io.NopCloser(sr), nil
-
-	case datasetmd.COMPRESSION_TYPE_ZSTD:
-		zr, err := zstd.NewReader(dataReader)
-		if err != nil {
-			return nil, nil, fmt.Errorf("creating zstd reader: %w", err)
+	// We give two attempts to append the data to the buffer; if the buffer is
+	// full, we cut a page and then append again to the newly reset buffer.
+	//
+	// The second iteration should never fail, as the buffer will always be
+	// empty.
+	for range 2 {
+		if c.append(row, value) {
+			c.rows = row + 1
+			return nil
 		}
-		return io.NopCloser(bitmapReader), newZstdReader(zr), nil
+
+		c.Flush()
 	}
 
-	panic(fmt.Sprintf("Unexpected compression type %s", p.Compression.String()))
+	panic("column.Append: failed to append value to fresh buffer")
+}
+
+// Backfill adds NULLs into Column up to the provided row number. If values
+// exist up to the row number, Backfill does nothing.
+func (c *Column) Backfill(row int) {
+	// We give two attempts to append the data to the buffer; if the buffer is
+	// full, we cut a page and then append again to the newly reset buffer.
+	//
+	// The second iteration should never fail, as the buffer will always be
+	// empty.
+	for range 2 {
+		if c.backfill(row) {
+			return
+		}
+		c.Flush()
+	}
+
+	panic("column.Backfill: failed to append value to fresh buffer")
+}
+
+func (c *Column) backfill(row int) bool {
+	for row > c.rows {
+		if !c.builder.AppendNull() {
+			return false
+		}
+		c.rows++
+	}
+
+	return true
+}
+
+func (c *Column) append(row int, value page.Value) bool {
+	for row > c.rows {
+		if !c.builder.AppendNull() {
+			return false
+		}
+		c.rows++
+	}
+
+	return c.builder.Append(value)
+}
+
+// Flush flushes the current buffer and stores it as a [Page]. Flush does
+// nothing if there are no rows in the buffer.
+func (c *Column) Flush() {
+	if c.builder.Rows() == 0 {
+		return
+	}
+
+	page, err := c.builder.Flush()
+	if err != nil {
+		panic(fmt.Sprintf("failed to flush page: %s", err))
+	}
+	c.pages = append(c.pages, page)
+}
+
+// Pages returns a read-only slice of Pages in the Column. The caller must not
+// modify this slice.
+//
+// Any unflushed data is not included in the returned slice of Pages. To make
+// sure all data is available, call [Column.Flush] before calling Pages.
+func (c *Column) Pages() []page.Page {
+	return c.pages
+}
+
+// ColumnInfo describes a [Column].
+type ColumnInfo struct {
+	Name string              // Name of the column, if any.
+	Type datasetmd.ValueType // Type of values in the column.
+
+	RowsCount        int // Total number of rows in the column.
+	CompressedSize   int // Total size of all pages in the column after compression.
+	UncompressedSize int // Total size of all pages in the column before compression.
+
+	Compression datasetmd.CompressionType // Compression used for the column.
+
+	Statistics *datasetmd.Statistics // Optional statistics for the column.
+}
+
+// Info returns [ColumnInfo] for the column.
+//
+// Any unflushed data is not included in calculated info. To make sure all data
+// is available, call [Column.Flush] before calling Pages.
+//
+// By default, ColumnInfo.Statistics is nil. Callers must manually compute
+// statistics for columns if needed.
+func (c *Column) Info() ColumnInfo {
+	info := ColumnInfo{
+		Name: c.name,
+		Type: c.opts.Value,
+
+		Compression: c.opts.Compression,
+	}
+
+	// TODO(rfratto): Should we compute column-wide statistics if they're
+	// available in pages?
+	//
+	// That would potentially work for min/max values, but not for count
+	// distinct, unless we had a way to pass sketches around.
+
+	for _, page := range c.pages {
+		info.RowsCount += page.RowCount
+		info.CompressedSize += page.CompressedSize
+		info.UncompressedSize += page.UncompressedSize
+	}
+
+	return info
 }

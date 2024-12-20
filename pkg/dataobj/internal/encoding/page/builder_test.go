@@ -1,17 +1,19 @@
-package dataset_test
+package page_test
 
 import (
 	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/stretchr/testify/require"
+
+	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/all" // Import encodings
+
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
-	"github.com/stretchr/testify/require"
 )
 
-func TestDataBuffer_String(t *testing.T) {
+func TestBuilder_String(t *testing.T) {
 	in := []string{
 		"hello, world!",
 		"",
@@ -25,13 +27,13 @@ func TestDataBuffer_String(t *testing.T) {
 		"goodbye",
 	}
 
-	opts := dataset.BufferOptions{
+	opts := page.BuilderOptions{
 		PageSizeHint: 1024,
 		Value:        datasetmd.VALUE_TYPE_STRING,
 		Compression:  datasetmd.COMPRESSION_TYPE_ZSTD,
 		Encoding:     datasetmd.ENCODING_TYPE_PLAIN,
 	}
-	b, err := dataset.NewBuffer(opts)
+	b, err := page.NewBuilder(opts)
 	require.NoError(t, err)
 
 	for _, s := range in {
@@ -46,14 +48,14 @@ func TestDataBuffer_String(t *testing.T) {
 	t.Log("Compressed size: ", page.CompressedSize)
 }
 
-func TestDataBuffer_Number(t *testing.T) {
-	opts := dataset.BufferOptions{
+func TestBuilder_Number(t *testing.T) {
+	opts := page.BuilderOptions{
 		PageSizeHint: 1_500_000,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
 	}
-	buf, err := dataset.NewBuffer(opts)
+	buf, err := page.NewBuilder(opts)
 	require.NoError(t, err)
 
 	ts := time.Now().UTC()

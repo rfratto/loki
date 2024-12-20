@@ -10,6 +10,17 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
+func init() {
+	// Register the encoding to the page package so instances of it can be
+	// dynamically created.
+	page.RegisterValueEncoding(
+		datasetmd.VALUE_TYPE_INT64,
+		datasetmd.ENCODING_TYPE_DELTA,
+		func(w encoding.Writer) page.ValueEncoder { return NewEncoder(w) },
+		func(r encoding.Reader) page.ValueDecoder { return NewDecoder(r) },
+	)
+}
+
 // The Encoder encodes delta-encoded int64s. Values are encoded as varint, with
 // each subsequent value being the delta from the previous value.
 type Encoder struct {

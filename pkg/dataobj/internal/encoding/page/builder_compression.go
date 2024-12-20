@@ -1,4 +1,4 @@
-package dataset
+package page
 
 import (
 	"bufio"
@@ -6,41 +6,42 @@ import (
 	"io"
 
 	"github.com/golang/snappy"
+	"github.com/klauspost/compress/zstd"
+
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
-	"github.com/klauspost/compress/zstd"
 )
 
-// A compresser compresses data written to it, writing the compressed data to
-// an underlying buffer.
-type compresser struct {
+// A compressWriter compresses data written to it and forwards compressed data
+// to an underlying buffer.
+type compressWriter struct {
 	// To be able to implement [io.ByteWriter], we always write directly to buf,
 	// which then flushes to w once it's full.
 
 	w   io.WriteCloser // Compressing writer.
-	buf *bufio.Writer  // Buffered writer for compressing writer.
+	buf *bufio.Writer  // Buffered writer in front of w to be able to do WriteByte.
 
 	compression       datasetmd.CompressionType // Compression type used.
 	uncompressedBytes int                       // Number of uncompressed bytes written.
 }
 
-var _ encoding.Writer = (*compresser)(nil)
+var _ encoding.Writer = (*compressWriter)(nil)
 
-func newCompresser(w io.Writer, ty datasetmd.CompressionType) *compresser {
-	c := compresser{compression: ty}
+func newCompressWriter(w io.Writer, ty datasetmd.CompressionType) *compressWriter {
+	c := compressWriter{compression: ty}
 	c.Reset(w)
 	return &c
 }
 
 // Write writes p to the underlying buffer.
-func (c *compresser) Write(p []byte) (n int, err error) {
+func (c *compressWriter) Write(p []byte) (n int, err error) {
 	n, err = c.buf.Write(p)
 	c.uncompressedBytes += n
 	return
 }
 
 // WriteByte writes a single byte to the underlying buffer.
-func (c *compresser) WriteByte(b byte) error {
+func (c *compressWriter) WriteByte(b byte) error {
 	if err := c.buf.WriteByte(b); err != nil {
 		return fmt.Errorf("writing byte: %w", err)
 	}
@@ -49,7 +50,7 @@ func (c *compresser) WriteByte(b byte) error {
 }
 
 // Flush flushes all pending data to the underlying writer.
-func (c *compresser) Flush() error {
+func (c *compressWriter) Flush() error {
 	// First flush our buffer.
 	if err := c.buf.Flush(); err != nil {
 		return fmt.Errorf("flushing buffer: %w", err)
@@ -68,7 +69,7 @@ func (c *compresser) Flush() error {
 
 // Reset discards the writer's state and switches the compresser to write to w.
 // This permits reusing a Writer rather than allocating a new one.
-func (c *compresser) Reset(writer io.Writer) {
+func (c *compressWriter) Reset(writer io.Writer) {
 	if r, ok := c.w.(interface{ Reset(io.Writer) }); ok {
 		r.Reset(writer)
 	} else {
@@ -104,13 +105,13 @@ func (c *compresser) Reset(writer io.Writer) {
 }
 
 // UncompressedSize returns the total number of bytes written to the writer.
-func (c *compresser) UncompressedSize() int {
+func (c *compressWriter) UncompressedSize() int {
 	return c.uncompressedBytes
 }
 
 // CompressedSize returns an estimate of the total number of bytes after
 // compression.
-func (c *compresser) CompressedSize() int {
+func (c *compressWriter) CompressedSize() int {
 	const (
 		// averageCompressionRatioSnappy is the average compression ratio of Snappy.
 		//
@@ -137,7 +138,7 @@ func (c *compresser) CompressedSize() int {
 }
 
 // Close closes the underlying writer.
-func (c *compresser) Close() error {
+func (c *compressWriter) Close() error {
 	if err := c.Flush(); err != nil {
 		return err
 	}

@@ -12,8 +12,7 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
-// TODO(rfratto): way more scanner tests. Also can we delete reader.go now? See
-// iter.go for another comment.
+// TODO(rfratto): way more scanner tests.
 //
 // TODO(rfratto): support a presence column to avoid loading columns
 // unnecessarily. The presence column would be passed to NewScanner separately
@@ -307,7 +306,7 @@ type PageGetter interface {
 
 	// ReadPages retrieves PageData for the provided pages. The order of the
 	// returned set of PageData must match the input set.
-	ReadPages(ctx context.Context, pages []*datasetmd.PageInfo) ([]PageData, error)
+	ReadPages(ctx context.Context, pages []*datasetmd.PageInfo) ([]page.Data, error)
 }
 
 // Filters.
