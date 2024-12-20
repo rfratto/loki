@@ -17,6 +17,12 @@ import (
 // TODO(rfratto): support a presence column to avoid loading columns
 // unnecessarily. The presence column would be passed to NewScanner separately
 // and it wouldn't emit entries with it.
+//
+// TODO(rfratto): it's a bit weird for Scanner to exist in this package but not
+// really interact with Column or ColumnInfo at all. Plus, PageGetter isn't
+// naturally implemented by obj.Decoder and we had to hack it in. Is there a
+// better way of having a dataset-scoped utility for scanning datasets that
+// integrates better with our other types?
 
 // A Scanner enables scanning over a set of rows in a dataset. Scanners lazily
 // load columns based on what is being queried and any filters added to the
