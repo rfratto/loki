@@ -108,19 +108,27 @@ type column struct {
 	builder *ColumnBuilder
 }
 
-func (c column) Info() *ColumnInfo { return c.builder.Info() }
+func (c column) Info() *ColumnInfo {
+	// Columns may change over time so we don't cache the result of
+	// c.builder.Info().
+	return c.builder.Info()
+}
 
 func (c column) Pages(ctx context.Context) (Pages, error) {
 	var pages = make([]Page, len(c.builder.Pages()))
 	for i, p := range c.builder.Pages() {
-		pages[i] = &columnPage{page: p}
+		pages[i] = &columnPage{
+			info: p.Info(),
+			page: p,
+		}
 	}
 	return pages, nil
 }
 
 type columnPage struct {
+	info *page.Info
 	page *page.Page
 }
 
-func (p *columnPage) Info() *page.Info                            { return p.page.Info() }
+func (p *columnPage) Info() *page.Info                            { return p.info }
 func (p *columnPage) Data(ctx context.Context) (page.Data, error) { return p.page.Data, nil }

@@ -33,7 +33,19 @@ func (d *streamsDataset) ListColumns(ctx context.Context) ([]dataset.Column, err
 
 	columns := make([]dataset.Column, 0, len(columnDescs))
 	for _, desc := range columnDescs {
-		columns = append(columns, streamsColumn{ds: d, desc: desc})
+		info := &dataset.ColumnInfo{
+			Name: desc.Info.Name,
+			Type: desc.Info.ValueType,
+
+			RowsCount:        int(desc.Info.RowsCount),
+			UncompressedSize: int(desc.Info.UncompressedSize),
+			CompressedSize:   int(desc.Info.CompressedSize),
+
+			Compression: desc.Info.Compression,
+
+			Statistics: desc.Info.Statistics,
+		}
+		columns = append(columns, &streamsColumn{info: info, ds: d, desc: desc})
 	}
 	return columns, nil
 }
@@ -42,7 +54,7 @@ func (d *streamsDataset) ListPages(ctx context.Context, columns []dataset.Column
 	var pagesList = make([]dataset.Pages, len(columns))
 
 	for i, column := range columns {
-		c, ok := column.(streamsColumn)
+		c, ok := column.(*streamsColumn)
 		if !ok {
 			return nil, fmt.Errorf("unrecognized column %v", c)
 		}
@@ -59,7 +71,7 @@ func (d *streamsDataset) ListPages(ctx context.Context, columns []dataset.Column
 func (d *streamsDataset) ReadPages(ctx context.Context, pages []dataset.Page) ([]page.Data, error) {
 	var descs = make([]*ColumnPageDesc, len(pages))
 	for i, page := range pages {
-		p, ok := page.(streamsPage)
+		p, ok := page.(*streamsPage)
 		if !ok {
 			return nil, fmt.Errorf("unrecognized page %v", p)
 		}
@@ -77,57 +89,49 @@ func (d *streamsDataset) ReadPages(ctx context.Context, pages []dataset.Page) ([
 }
 
 type streamsColumn struct {
+	info *dataset.ColumnInfo
 	ds   *streamsDataset
 	desc *streamsmd.ColumnDesc
 }
 
-func (c streamsColumn) Info() *dataset.ColumnInfo {
-	return &dataset.ColumnInfo{
-		Name: c.desc.Info.Name,
-		Type: c.desc.Info.ValueType,
-
-		RowsCount:        int(c.desc.Info.RowsCount),
-		UncompressedSize: int(c.desc.Info.UncompressedSize),
-		CompressedSize:   int(c.desc.Info.CompressedSize),
-
-		Compression: c.desc.Info.Compression,
-
-		Statistics: c.desc.Info.Statistics,
-	}
+func (c *streamsColumn) Info() *dataset.ColumnInfo {
+	return c.info
 }
 
-func (c streamsColumn) Pages(ctx context.Context) (dataset.Pages, error) {
+func (c *streamsColumn) Pages(ctx context.Context) (dataset.Pages, error) {
 	descs, err := c.ds.dec.Pages(ctx, c.desc)
 	if err != nil {
 		return nil, err
 	}
 	pages := make([]dataset.Page, 0, len(descs))
 	for _, desc := range descs {
-		pages = append(pages, streamsPage{ds: c.ds, desc: desc})
+		info := &page.Info{
+			UncompressedSize: int(desc.Page.Info.UncompressedSize),
+			CompressedSize:   int(desc.Page.Info.CompressedSize),
+			CRC32:            desc.Page.Info.Crc32,
+			RowCount:         int(desc.Page.Info.RowsCount),
+
+			Value:       desc.Column.Info.ValueType,
+			Compression: desc.Page.Info.Compression,
+			Encoding:    desc.Page.Info.Encoding,
+			Stats:       desc.Page.Info.Statistics,
+		}
+		pages = append(pages, &streamsPage{info: info, ds: c.ds, desc: desc})
 	}
 	return pages, nil
 }
 
 type streamsPage struct {
+	info *page.Info
 	ds   *streamsDataset
 	desc *ColumnPageDesc
 }
 
-func (p streamsPage) Info() *page.Info {
-	return &page.Info{
-		UncompressedSize: int(p.desc.Page.Info.UncompressedSize),
-		CompressedSize:   int(p.desc.Page.Info.CompressedSize),
-		CRC32:            p.desc.Page.Info.Crc32,
-		RowCount:         int(p.desc.Page.Info.RowsCount),
-
-		Value:       p.desc.Column.Info.ValueType,
-		Compression: p.desc.Page.Info.Compression,
-		Encoding:    p.desc.Page.Info.Encoding,
-		Stats:       p.desc.Page.Info.Statistics,
-	}
+func (p *streamsPage) Info() *page.Info {
+	return p.info
 }
 
-func (p streamsPage) Data(ctx context.Context) (page.Data, error) {
+func (p *streamsPage) Data(ctx context.Context) (page.Data, error) {
 	for data, err := range p.ds.dec.ReadPages(ctx, []*ColumnPageDesc{p.desc}) {
 		return data.Data, err
 	}
