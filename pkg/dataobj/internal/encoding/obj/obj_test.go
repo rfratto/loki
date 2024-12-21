@@ -26,10 +26,10 @@ func Test(t *testing.T) {
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 	}
 
-	columnFirstName, err := dataset.NewColumn("first_name", opts)
+	columnFirstName, err := dataset.NewColumnBuilder("first_name", opts)
 	require.NoError(t, err)
 
-	columnLastName, err := dataset.NewColumn("last_name", opts)
+	columnLastName, err := dataset.NewColumnBuilder("last_name", opts)
 	require.NoError(t, err)
 
 	type name struct {
@@ -104,11 +104,14 @@ func Test(t *testing.T) {
 		require.Len(t, sections, 1)
 
 		streamsDec := dec.StreamsDecoder()
-		columns, err := streamsDec.Columns(context.TODO(), sections[0])
+		dset, err := obj.StreamsDataset(streamsDec, sections[0])
+		require.NoError(t, err)
+
+		columns, err := dset.ListColumns(context.TODO())
 		require.NoError(t, err)
 		require.Len(t, columns, 2)
 
-		scan := dataset.NewScanner(streamsmd.ColumnInfos(columns), streamsDec.DatasetDecoder())
+		scan := dataset.NewScanner(dset, columns)
 		for rowEntry, err := range scan.Iter(context.TODO()) {
 			require.NoError(t, err)
 
@@ -117,7 +120,7 @@ func Test(t *testing.T) {
 					continue
 				}
 
-				switch columns[i].Info.Name {
+				switch columns[i].Info().Name {
 				case "first_name":
 					actual[colEntry.Row].FirstName = colEntry.Value.String()
 				case "last_name":

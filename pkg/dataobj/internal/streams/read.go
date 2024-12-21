@@ -17,7 +17,6 @@ import (
 
 // IterStreams iterates over streams in the provided decoder.
 func IterStreams(ctx context.Context, dec obj.Decoder) iter.Seq2[Stream, error] {
-
 	return func(yield func(Stream, error) bool) {
 		sections, err := dec.Sections(ctx)
 		if err != nil {
@@ -47,20 +46,32 @@ func iterSection(ctx context.Context, dec obj.StreamsDecoder, section *filemd.Se
 			return
 		}
 
-		columns, err := dec.Columns(ctx, section)
+		streamsColumns, err := dec.Columns(ctx, section)
 		if err != nil {
 			yield(Stream{}, err)
 			return
 		}
 
-		scanner := dataset.NewScanner(streamsmd.ColumnInfos(columns), dec.DatasetDecoder())
+		dset, err := obj.StreamsDataset(dec, section)
+		if err != nil {
+			yield(Stream{}, err)
+			return
+		}
+
+		columns, err := dset.ListColumns(ctx)
+		if err != nil {
+			yield(Stream{}, err)
+			return
+		}
+
+		scanner := dataset.NewScanner(dset, columns)
 		for rowEntry, err := range scanner.Iter(ctx) {
 			if err != nil {
 				yield(Stream{}, err)
 				return
 			}
 
-			stream, err := decodeRow(columns, rowEntry)
+			stream, err := decodeRow(streamsColumns, rowEntry)
 			if !yield(stream, err) || err != nil {
 				return
 			}

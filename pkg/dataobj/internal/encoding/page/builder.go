@@ -166,17 +166,17 @@ func (b *Builder) Rows() int {
 // To avoid computing useless Stats, the Stats field of the returned Page is
 // unset. If Stats are needed for a Page, callers should compute Stats by
 // iterating over values in the returned Page.
-func (b *Builder) Flush() (Page, error) {
+func (b *Builder) Flush() (*Page, error) {
 	if b.rows == 0 {
-		return Page{}, fmt.Errorf("no data to flush")
+		return nil, fmt.Errorf("no data to flush")
 	}
 
 	// Before we can build the page we need to finish flushing what's remaining
 	// in our buffers.
 	if err := b.valuesWriter.Flush(); err != nil {
-		return Page{}, fmt.Errorf("flushing values writer: %w", err)
+		return nil, fmt.Errorf("flushing values writer: %w", err)
 	} else if err := b.presenceEnc.Flush(); err != nil {
-		return Page{}, fmt.Errorf("flushing presence bitmap: %w", err)
+		return nil, fmt.Errorf("flushing presence bitmap: %w", err)
 	}
 
 	// The final data of our page is the combination of the presence bitmap and
@@ -193,11 +193,11 @@ func (b *Builder) Flush() (Page, error) {
 	)
 
 	if err := encoding.WriteUvarint(finalData, uint64(b.presenceBuffer.Len())); err != nil {
-		return Page{}, fmt.Errorf("writing presence buffer size: %w", err)
+		return nil, fmt.Errorf("writing presence buffer size: %w", err)
 	} else if _, err := b.presenceBuffer.WriteTo(finalData); err != nil {
-		return Page{}, fmt.Errorf("writing presence buffer: %w", err)
+		return nil, fmt.Errorf("writing presence buffer: %w", err)
 	} else if _, err := b.valuesBuffer.WriteTo(finalData); err != nil {
-		return Page{}, fmt.Errorf("writing values: %w", err)
+		return nil, fmt.Errorf("writing values: %w", err)
 	}
 
 	checksum := crc32.Checksum(finalData.Bytes(), checksumTable)
@@ -227,7 +227,7 @@ func (b *Builder) Flush() (Page, error) {
 
 	// Reset state before returning.
 	b.reset()
-	return page, nil
+	return &page, nil
 }
 
 func (b *Builder) reset() {

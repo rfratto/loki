@@ -24,7 +24,7 @@ type StreamsEncoder struct {
 
 // OpenColumn opens a new column in the streams section. OpenColumn fails if
 // there is another open column, or if the StreamsEncoder is closed.
-func (enc *StreamsEncoder) OpenColumn(columnType streamsmd.ColumnType, info dataset.ColumnInfo) (*StreamsColumnEncoder, error) {
+func (enc *StreamsEncoder) OpenColumn(columnType streamsmd.ColumnType, info *dataset.ColumnInfo) (*StreamsColumnEncoder, error) {
 	if enc.curColumn != nil {
 		return nil, ErrElementExist
 	} else if enc.closed {
@@ -159,7 +159,7 @@ type StreamsColumnEncoder struct {
 
 // AppendPage appends a new page to the column. AppendPage fails if the column
 // has been closed.
-func (enc *StreamsColumnEncoder) AppendPage(page page.Page) error {
+func (enc *StreamsColumnEncoder) AppendPage(page *page.Page) error {
 	if enc.closed {
 		return ErrClosed
 	}

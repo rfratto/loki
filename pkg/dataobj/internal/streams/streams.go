@@ -83,7 +83,7 @@ func (s *Streams) getOrAddStream(streamLabels labels.Labels) *Stream {
 //
 // Streams are encoded in the order they were first appended.
 func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
-	minTimestampColumn, err := dataset.NewColumn("", page.BuilderOptions{
+	minTimestampColumn, err := dataset.NewColumnBuilder("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -93,7 +93,7 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating minimum timestamp column: %w", err)
 	}
 
-	maxTimestampColumn, err := dataset.NewColumn("", page.BuilderOptions{
+	maxTimestampColumn, err := dataset.NewColumnBuilder("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -103,7 +103,7 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating maximum timestamp column: %w", err)
 	}
 
-	recordsCountColumn, err := dataset.NewColumn("", page.BuilderOptions{
+	recordsCountColumn, err := dataset.NewColumnBuilder("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -114,17 +114,17 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 	}
 
 	var (
-		labelColumns      = []*dataset.Column{}
+		labelColumns      = []*dataset.ColumnBuilder{}
 		labelColumnLookup = map[string]int{} // Name to index
 	)
 
-	getLabelColumn := func(name string) (*dataset.Column, error) {
+	getLabelColumn := func(name string) (*dataset.ColumnBuilder, error) {
 		idx, ok := labelColumnLookup[name]
 		if ok {
 			return labelColumns[idx], nil
 		}
 
-		labelColumn, err := dataset.NewColumn(name, page.BuilderOptions{
+		labelColumn, err := dataset.NewColumnBuilder(name, page.BuilderOptions{
 			PageSizeHint: pageSize,
 			Value:        datasetmd.VALUE_TYPE_STRING,
 			Encoding:     datasetmd.ENCODING_TYPE_PLAIN,

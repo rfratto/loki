@@ -48,19 +48,19 @@ type Page struct {
 	Data Data
 }
 
-// Raw creates a Page from the given value type, info, and data. The arguments
-// are not validated to be correct.
-func Raw(valueType datasetmd.ValueType, info *datasetmd.PageInfo, data Data) Page {
-	return Page{
+// Raw creates a Page from the given info and data. The arguments are not
+// validated to be correct.
+func Raw(info *Info, data Data) *Page {
+	return &Page{
 		UncompressedSize: int(info.UncompressedSize),
 		CompressedSize:   int(info.CompressedSize),
-		CRC32:            uint32(info.Crc32),
-		RowCount:         int(info.RowsCount),
+		CRC32:            uint32(info.CRC32),
+		RowCount:         int(info.RowCount),
 
-		Value:       valueType,
+		Value:       info.Value,
 		Compression: info.Compression,
 		Encoding:    info.Encoding,
-		Stats:       info.Statistics,
+		Stats:       info.Stats,
 
 		Data: data,
 	}
@@ -100,6 +100,34 @@ func (p *Page) Reader() (presence io.ReadCloser, values io.ReadCloser, err error
 	}
 
 	panic(fmt.Sprintf("Unexpected compression type %s", p.Compression.String()))
+}
+
+// Info describes the content of a [Page].
+type Info struct {
+	UncompressedSize int    // UncompressedSize is the size of the page before compression.
+	CompressedSize   int    // CompressedSize is the size of the page after compression.
+	CRC32            uint32 // CRC32 is the CRC32 checksum of the compressed page.
+	RowCount         int    // RowCount is the number of rows in the page.
+
+	Value       datasetmd.ValueType       // Value type of valueData in Data.
+	Compression datasetmd.CompressionType // Compression used for valueData in Data.
+	Encoding    datasetmd.EncodingType    // Encoding used for valueData in Data.
+	Stats       *datasetmd.Statistics     // Optional statistics for the page.
+}
+
+// Info returns the [Info] for the Page.
+func (p *Page) Info() *Info {
+	return &Info{
+		UncompressedSize: p.UncompressedSize,
+		CompressedSize:   p.CompressedSize,
+		CRC32:            p.CRC32,
+		RowCount:         p.RowCount,
+
+		Value:       p.Value,
+		Compression: p.Compression,
+		Encoding:    p.Encoding,
+		Stats:       p.Stats,
+	}
 }
 
 // zstdReader implements [io.ReadCloser] for a [zstd.Decoder].

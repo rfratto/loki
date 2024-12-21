@@ -16,7 +16,7 @@ import (
 // Callers must ensure that all encodings are in the import graph for Iter to
 // be able to successfully decode values; otherwise, Iter will emit an error
 // saying a decoder cannot be found.
-func Iter(p Page) iter.Seq2[Value, error] {
+func Iter(p *Page) iter.Seq2[Value, error] {
 	return func(yield func(Value, error) bool) {
 		presenceReader, valuesReader, err := p.Reader()
 		if err != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"iter"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
@@ -27,9 +26,6 @@ type (
 
 	// StreamsDecoder supports decoding data within a streams section.
 	StreamsDecoder interface {
-		// DatasetDecoder returns a DatasetDecoder for data in the streams section.
-		DatasetDecoder() dataset.PageGetter
-
 		// Columns describes the set of columns in the provided section.
 		Columns(ctx context.Context, section *filemd.SectionInfo) ([]*streamsmd.ColumnDesc, error)
 
@@ -39,7 +35,7 @@ type (
 		// ReadPages reads the provided set of pages, iterating over their data
 		// matching the argument order. If an error is encountered while retrieving
 		// pages, an error is emitted and iteration stops.
-		ReadPages(ctx context.Context, pages []*ColumnPageDesc) iter.Seq2[page.Page, error]
+		ReadPages(ctx context.Context, pages []*ColumnPageDesc) iter.Seq2[*page.Page, error]
 	}
 )
 

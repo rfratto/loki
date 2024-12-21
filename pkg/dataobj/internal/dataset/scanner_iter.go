@@ -1,33 +1,31 @@
 package dataset
 
 import (
-	"errors"
 	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"golang.org/x/net/context"
 )
 
 // columnIter iterates over entries in a column, lazily loading pages on
 // demand.
 type columnIter struct {
-	column     *datasetmd.ColumnInfo
-	pages      []*datasetmd.PageInfo
+	column     Column
+	pages      []Page
 	rowOffsets []int
-	getter     PageGetter
+	getter     Dataset
 
 	row int
 }
 
-func newColumnIter(column *datasetmd.ColumnInfo, pages []*datasetmd.PageInfo, getter PageGetter) *columnIter {
+func newColumnIter(column Column, pages []Page, dataset Dataset) *columnIter {
 	_, offsets := getRowOffsets(pages)
 
 	return &columnIter{
 		column:     column,
 		pages:      pages,
 		rowOffsets: offsets,
-		getter:     getter,
+		getter:     dataset,
 	}
 }
 
@@ -45,7 +43,7 @@ func (it *columnIter) Seek(row int) {
 func (it *columnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
 	return func(yield func(ScannerEntry, error) bool) {
 		var (
-			curPage     *datasetmd.PageInfo
+			curPage     Page
 			curPageData page.Data
 		)
 
@@ -56,22 +54,19 @@ func (it *columnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
 			if nextPage == nil { // No more pages.
 				return
 			} else if nextPage != curPage { // Lazily load page data.
-				data, err := it.getter.ReadPages(ctx, []*datasetmd.PageInfo{nextPage})
+				data, err := nextPage.Data(ctx)
 				if err != nil {
 					yield(ScannerEntry{}, err)
-					return
-				} else if len(data) != 1 {
-					yield(ScannerEntry{}, errors.New("page count mismatch"))
 					return
 				}
 
 				curPage = nextPage
-				curPageData = data[0]
+				curPageData = data
 			}
 
 			startRow := it.row
 
-			for ent, err := range iterPage(pageStart, it.column, curPage, curPageData) {
+			for ent, err := range iterPage(pageStart, curPage, curPageData) {
 				if err != nil {
 					yield(ent, err)
 					return
@@ -100,13 +95,11 @@ func (it *columnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
 	}
 }
 
-func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.PageInfo, data page.Data) iter.Seq2[ScannerEntry, error] {
-	p := page.Raw(column.ValueType, pageInfo, data)
-
+func iterPage(startRow int, p Page, data page.Data) iter.Seq2[ScannerEntry, error] {
 	return func(yield func(ScannerEntry, error) bool) {
 		row := startRow
 
-		for val, err := range page.Iter(p) {
+		for val, err := range page.Iter(page.Raw(p.Info(), data)) {
 			if err != nil {
 				yield(ScannerEntry{}, err)
 				return
@@ -123,10 +116,10 @@ func iterPage(startRow int, column *datasetmd.ColumnInfo, pageInfo *datasetmd.Pa
 
 // pageForRow returns the page that contains the provided row number. If row is
 // out of bounds of all pages, pageForRow returns nil.
-func (it *columnIter) pageForRow(row int) (pi *datasetmd.PageInfo, startRow, endRow int) {
+func (it *columnIter) pageForRow(row int) (p Page, startRow, endRow int) {
 	for i, page := range it.pages {
 		pageStart := it.rowOffsets[i]
-		pageEnd := pageStart + int(page.RowsCount) - 1
+		pageEnd := pageStart + int(page.Info().RowCount) - 1
 
 		if row >= pageStart && row <= pageEnd {
 			return page, pageStart, pageEnd

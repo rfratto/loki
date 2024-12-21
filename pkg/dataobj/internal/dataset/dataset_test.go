@@ -24,7 +24,7 @@ func Test(t *testing.T) {
 		"goodbye",
 	}
 
-	column, err := dataset.NewColumn("", page.BuilderOptions{
+	column, err := dataset.NewColumnBuilder("", page.BuilderOptions{
 		// We want to set page size hint low enough to create more than one page,
 		// but high enough that we'll have pages with more than one row.
 		PageSizeHint: 10,

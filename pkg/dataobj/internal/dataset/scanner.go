@@ -9,7 +9,6 @@ import (
 	"slices"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
 // TODO(rfratto): way more scanner tests.
@@ -17,47 +16,59 @@ import (
 // TODO(rfratto): support a presence column to avoid loading columns
 // unnecessarily. The presence column would be passed to NewScanner separately
 // and it wouldn't emit entries with it.
-//
-// TODO(rfratto): it's a bit weird for Scanner to exist in this package but not
-// really interact with Column or ColumnInfo at all. Plus, PageGetter isn't
-// naturally implemented by obj.Decoder and we had to hack it in. Is there a
-// better way of having a dataset-scoped utility for scanning datasets that
-// integrates better with our other types?
-
 // A Scanner enables scanning over a set of rows in a dataset. Scanners lazily
 // load columns based on what is being queried and any filters added to the
 // Scanner.
 type Scanner struct {
 	totalRows int
-	columns   []*datasetmd.ColumnInfo
-	getter    PageGetter
+	columns   []Column
+	dataset   Dataset
 
-	columnIndex  map[*datasetmd.ColumnInfo]int // Looks up original index of a column.
-	pageFilters  map[*datasetmd.ColumnInfo]PageFilter
-	entryFilters map[*datasetmd.ColumnInfo]EntryFilter
+	columnIndex  map[Column]int // Looks up original index of a column.
+	pageFilters  map[Column]PageFilter
+	entryFilters map[Column]EntryFilter
+}
+
+// Filters.
+type (
+	// PageFilter is a function which filters out pages based on a column and
+	// page tuple. PageFilter should return true to keep the page, false to
+	// discard it.
+	PageFilter func(column *ColumnInfo, page *page.Info) bool
+
+	// EntryFilter is a function which filters out individual entries in a
+	// column. EntryFilter should return true to keep the entry, false to discard
+	// it.
+	EntryFilter func(column *ColumnInfo, entry ScannerEntry) bool
+)
+
+// ScannerEntry represents an individual entry in a scanned column.
+type ScannerEntry struct {
+	Row   int        // Column-wide row number of the scanned entry.
+	Value page.Value // Scanned value.
 }
 
 // NewScanner creates a new Scanner which scans over entries in the provided
 // columns, lazily downloading pages as needed from getter.
-func NewScanner(columns []*datasetmd.ColumnInfo, getter PageGetter) *Scanner {
-	columnIndex := make(map[*datasetmd.ColumnInfo]int, len(columns))
+func NewScanner(dataset Dataset, columns []Column) *Scanner {
+	columnIndex := make(map[Column]int, len(columns))
 	for i, column := range columns {
 		columnIndex[column] = i
 	}
 
 	totalRows := math.MinInt64
 	for _, column := range columns {
-		totalRows = max(totalRows, int(column.RowsCount))
+		totalRows = max(totalRows, int(column.Info().RowsCount))
 	}
 
 	return &Scanner{
 		totalRows: totalRows,
 		columns:   columns,
-		getter:    getter,
+		dataset:   dataset,
 
 		columnIndex:  columnIndex,
-		pageFilters:  make(map[*datasetmd.ColumnInfo]PageFilter),
-		entryFilters: make(map[*datasetmd.ColumnInfo]EntryFilter),
+		pageFilters:  make(map[Column]PageFilter),
+		entryFilters: make(map[Column]EntryFilter),
 	}
 }
 
@@ -73,7 +84,7 @@ func NewScanner(columns []*datasetmd.ColumnInfo, getter PageGetter) *Scanner {
 //
 // AddPageFilter returns an error if the listed column was not provided to
 // NewScanner.
-func (s *Scanner) AddPageFilter(column *datasetmd.ColumnInfo, include PageFilter) error {
+func (s *Scanner) AddPageFilter(column Column, include PageFilter) error {
 	if _, hasColumn := s.columnIndex[column]; !hasColumn {
 		return errors.New("column not in scanner")
 	}
@@ -89,7 +100,7 @@ func (s *Scanner) AddPageFilter(column *datasetmd.ColumnInfo, include PageFilter
 //
 // AddEntryFilter returns an error if the listed column was not provided to
 // NewScanner.
-func (s *Scanner) AddEntryFilter(column *datasetmd.ColumnInfo, include EntryFilter) error {
+func (s *Scanner) AddEntryFilter(column Column, include EntryFilter) error {
 	if _, hasColumn := s.columnIndex[column]; !hasColumn {
 		return errors.New("column not in scanner")
 	}
@@ -115,7 +126,9 @@ func (s *Scanner) AddEntryFilter(column *datasetmd.ColumnInfo, include EntryFilt
 // stops.
 func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 	type columnData struct {
-		Pages      []*datasetmd.PageInfo
+		Info       *ColumnInfo
+		Pages      []Page
+		PageInfos  []*page.Info
 		RowOffsets []int
 		TotalRows  int
 	}
@@ -128,8 +141,8 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 
 	return func(yield func([]ScannerEntry, error) bool) {
 		var (
-			columnDataSet = map[*datasetmd.ColumnInfo]*columnData{}
-			columnIters   = map[*datasetmd.ColumnInfo]pullIter{}
+			columnDataSet = map[Column]*columnData{}
+			columnIters   = map[Column]pullIter{}
 			startRow      = 0
 		)
 		defer func() {
@@ -138,43 +151,51 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 			}
 		}()
 
-		getColumnData := func(ci *datasetmd.ColumnInfo) (*columnData, error) {
-			if p, ok := columnDataSet[ci]; ok {
+		getColumnData := func(c Column) (*columnData, error) {
+			if p, ok := columnDataSet[c]; ok {
 				return p, nil
 			}
-			pi, err := s.getter.ColumnPages(ctx, ci)
+
+			pages, err := c.Pages(ctx)
 			if err != nil {
 				return nil, err
 			}
 
-			totalRows, offsets := getRowOffsets(pi)
+			pageInfos := make([]*page.Info, len(pages))
+			for i, p := range pages {
+				pageInfos[i] = p.Info()
+			}
+
+			totalRows, offsets := getRowOffsets(pages)
 			cd := &columnData{
-				Pages:      pi,
+				Info:       c.Info(),
+				Pages:      pages,
+				PageInfos:  pageInfos,
 				RowOffsets: offsets,
 				TotalRows:  totalRows,
 			}
-			columnDataSet[ci] = cd
+			columnDataSet[c] = cd
 			return cd, nil
 		}
 
-		getColumnIter := func(ci *datasetmd.ColumnInfo) (pullIter, error) {
-			if pi, ok := columnIters[ci]; ok {
+		getColumnIter := func(c Column) (pullIter, error) {
+			if pi, ok := columnIters[c]; ok {
 				return pi, nil
 			}
 
-			cd, err := getColumnData(ci)
+			cd, err := getColumnData(c)
 			if err != nil {
 				return pullIter{}, err
 			}
 
-			it := newColumnIter(ci, cd.Pages, s.getter)
+			it := newColumnIter(c, cd.Pages, s.dataset)
 			next, stop := iter.Pull2(it.Iter(ctx))
-			columnIters[ci] = pullIter{
+			columnIters[c] = pullIter{
 				Iter: it,
 				Next: next,
 				Stop: stop,
 			}
-			return columnIters[ci], nil
+			return columnIters[c], nil
 		}
 
 		// First, we need to process page filters.
@@ -185,9 +206,9 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 				return
 			}
 
-			for i, page := range cd.Pages {
+			for i, page := range cd.PageInfos {
 				pageStartRow := cd.RowOffsets[i]
-				pageEndRow := pageStartRow + int(page.RowsCount) - 1
+				pageEndRow := pageStartRow + int(page.RowCount) - 1
 
 				// If this page ends before our starting row, it's already being
 				// filtered out.
@@ -195,7 +216,7 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 					continue
 				}
 
-				if !pageFilter(column, page) {
+				if !pageFilter(cd.Info, page) {
 					// If a page is filtered out we want to start on first row of the
 					// next page, which is going to be pageEnd+1.
 					startRow = pageEndRow + 1
@@ -221,7 +242,7 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 		// entry filters, prefering columns that have less pages (implying more
 		// rows per page).
 		orderedColumns := slices.Clone(s.columns)
-		slices.SortStableFunc(orderedColumns, func(a, b *datasetmd.ColumnInfo) int {
+		slices.SortStableFunc(orderedColumns, func(a, b Column) int {
 			var (
 				_, aHasEntryFilter = s.entryFilters[a]
 				_, bHasEntryFilter = s.entryFilters[b]
@@ -281,7 +302,7 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 				// If any of our filters for this column filter the column out, we can
 				// skip the entire row.
 				for _, filter := range s.entryFilters {
-					if !filter(column, ent) {
+					if !filter(column.Info(), ent) {
 						continue NextRow
 					}
 				}
@@ -294,42 +315,12 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 	}
 }
 
-func getRowOffsets(pages []*datasetmd.PageInfo) (totalRows int, offsets []int) {
+func getRowOffsets(pages []Page) (totalRows int, offsets []int) {
 	offsets = make([]int, len(pages))
 	for i, page := range pages {
 		// The row offset for a page is the total number of rows up to that page.
 		offsets[i] = totalRows
-		totalRows += int(page.RowsCount)
+		totalRows += int(page.Info().RowCount)
 	}
 	return totalRows, offsets
-}
-
-// PageGetter retrieves page metadata for a column and the data of pages
-// itself.
-type PageGetter interface {
-	// ColumnPages returns the set of available pages for the given column.
-	ColumnPages(ctx context.Context, column *datasetmd.ColumnInfo) ([]*datasetmd.PageInfo, error)
-
-	// ReadPages retrieves PageData for the provided pages. The order of the
-	// returned set of PageData must match the input set.
-	ReadPages(ctx context.Context, pages []*datasetmd.PageInfo) ([]page.Data, error)
-}
-
-// Filters.
-type (
-	// PageFilter is a function which filters out pages based on a column and
-	// page tuple. PageFilter should return true to keep the page, false to
-	// discard it.
-	PageFilter func(column *datasetmd.ColumnInfo, page *datasetmd.PageInfo) bool
-
-	// EntryFilter is a function which filters out individual entries in a
-	// column. EntryFilter should return true to keep the entry, false to discard
-	// it.
-	EntryFilter func(column *datasetmd.ColumnInfo, entry ScannerEntry) bool
-)
-
-// ScannerEntry represents an individual entry in a scanned column.
-type ScannerEntry struct {
-	Row   int        // Column-wide row number of the scanned entry.
-	Value page.Value // Scanned value.
 }
