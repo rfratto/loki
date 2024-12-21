@@ -1,9 +1,8 @@
 package dataset
 
 import (
-	"iter"
-
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 	"golang.org/x/net/context"
 )
 
@@ -37,8 +36,8 @@ func (it *lazyColumnIter) Seek(row int) {
 // pages or rows.
 //
 // An Iter may be re-consumed by calling it.Seek(0).
-func (it *lazyColumnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
-	return func(yield func(ScannerEntry, error) bool) {
+func (it *lazyColumnIter) Iter(ctx context.Context) result.Seq[ScannerEntry] {
+	return result.Iter(func(yield func(ScannerEntry) bool) error {
 		var (
 			curPage     Page
 			curPageData page.Data
@@ -49,24 +48,22 @@ func (it *lazyColumnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, erro
 			// Find the page it.row is in.
 			nextPage, pageStart, _ := it.pageForRow(it.row)
 			if nextPage == nil { // No more pages.
-				return
+				return nil
 			} else if nextPage != curPage { // Lazily load page data.
 				data, err := nextPage.Data(ctx)
 				if err != nil {
-					yield(ScannerEntry{}, err)
-					return
+					return err
 				}
-
 				curPage = nextPage
 				curPageData = data
 			}
 
 			startRow := it.row
 
-			for ent, err := range iterPage(pageStart, curPage, curPageData) {
+			for res := range iterPage(pageStart, curPage, curPageData) {
+				ent, err := res.Value()
 				if err != nil {
-					yield(ent, err)
-					return
+					return err
 				}
 
 				// Update our row offset to start at the next row.
@@ -74,8 +71,8 @@ func (it *lazyColumnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, erro
 
 				// Emit the current row if it's after our starting row, otherwise we're
 				// trying to do a partial read through a page.
-				if ent.Row >= startRow && !yield(ent, err) {
-					return
+				if ent.Row >= startRow && !yield(ent) {
+					return nil
 				}
 
 				// If a call to yield updated it.row to be before the current row,
@@ -89,26 +86,27 @@ func (it *lazyColumnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, erro
 				startRow = max(startRow, it.row)
 			}
 		}
-	}
+	})
 }
 
-func iterPage(startRow int, p Page, data page.Data) iter.Seq2[ScannerEntry, error] {
-	return func(yield func(ScannerEntry, error) bool) {
+func iterPage(startRow int, p Page, data page.Data) result.Seq[ScannerEntry] {
+	return result.Iter(func(yield func(ScannerEntry) bool) error {
 		row := startRow
 
-		for val, err := range page.Iter(page.Raw(p.Info(), data)) {
+		for res := range page.Iter(page.Raw(p.Info(), data)) {
+			val, err := res.Value()
 			if err != nil {
-				yield(ScannerEntry{}, err)
-				return
+				return err
 			}
-
 			entry := ScannerEntry{Row: row, Value: val}
-			if !yield(entry, nil) {
-				return
+			if !yield(entry) {
+				return nil
 			}
 			row++
 		}
-	}
+
+		return nil
+	})
 }
 
 // pageForRow returns the page that contains the provided row number. If row is

@@ -5,13 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"iter"
 
 	"github.com/thanos-io/objstore"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 type bucketDecoder struct {
@@ -134,7 +134,7 @@ func (bd *bucketStreamsDecoder) Pages(ctx context.Context, col *logstreamsmd.Col
 	return md.Pages, nil
 }
 
-func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[logstreams.Page, error] {
+func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*logstreamsmd.PageInfo) result.Seq[logstreams.Page] {
 	readPage := func(ctx context.Context, path string, page *logstreamsmd.PageInfo) (logstreams.Page, error) {
 		rc, err := bd.bucket.GetRange(ctx, path, int64(page.DataOffset), int64(page.DataSize))
 		if err != nil {
@@ -161,20 +161,18 @@ func (bd *bucketStreamsDecoder) ReadPages(ctx context.Context, pages []*logstrea
 		}, nil
 	}
 
-	return func(yield func(logstreams.Page, error) bool) {
+	return result.Iter(func(yield func(logstreams.Page) bool) error {
 		// TODO(rfratto): this could be optimized by getting multiple pages at
 		// once; pages that are right next to one another can be read in a single
 		// pass, but we can also tolerate some amount of unused data in between to
 		// minimize reads.
 		for _, pageHeader := range pages {
 			page, err := readPage(ctx, bd.path, pageHeader)
-			if !yield(page, err) {
-				return
-			}
-
-			if err != nil {
-				return
+			if err != nil || !yield(page) {
+				return err
 			}
 		}
-	}
+
+		return nil
+	})
 }

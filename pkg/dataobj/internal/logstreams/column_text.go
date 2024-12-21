@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"iter"
 	"strings"
 	"unsafe"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 const (
@@ -26,26 +26,33 @@ const (
 // IterTextPage returns an iterator over a page of values in a text-based
 // column. IterTextPage yields an error if the column does not contain text or
 // the page could not be read.
-func IterTextPage(col *logstreamsmd.ColumnInfo, page Page) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
+func IterTextPage(col *logstreamsmd.ColumnInfo, page Page) result.Seq[string] {
+	return result.Iter(func(yield func(string) bool) error {
 		if !isTextColumn(col) {
-			yield("", fmt.Errorf("column type %s does not contain text data", col.Type))
-			return
+			return fmt.Errorf("column type %s does not contain text data", col.Type)
 		}
 
 		rc, err := page.Reader()
 		if err != nil {
-			yield("", fmt.Errorf("opening page reader: %w", err))
-			return
+			return fmt.Errorf("opening page reader: %w", err)
 		}
 		defer rc.Close()
 
 		if page.Encoding != logstreamsmd.ENCODING_TYPE_PLAIN {
-			yield("", fmt.Errorf("unsupported encoding %s for text column", page.Encoding))
-			return
+			return fmt.Errorf("unsupported encoding %s for text column", page.Encoding)
 		}
-		textPageIter(bufio.NewReader(rc), page.RowCount)(yield)
-	}
+
+		for res := range textPageIter(bufio.NewReader(rc), page.RowCount) {
+			text, err := res.Value()
+			if err != nil {
+				return err
+			} else if !yield(text) {
+				return nil
+			}
+		}
+
+		return nil
+	})
 }
 
 func isTextColumn(col *logstreamsmd.ColumnInfo) bool {
@@ -215,18 +222,17 @@ func (p *headTextPage) Flush() (Page, error) {
 
 // textPageIter returns an iterator for the provided rows count over text page
 // data read from s.
-func textPageIter(s encoding.Reader, rows int) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
+func textPageIter(s encoding.Reader, rows int) result.Seq[string] {
+	return result.Iter(func(yield func(string) bool) error {
 		// We iterate over the number of expected rows in the page (rather than
 		// freely fetching entries until EOF) to catch potential encoding errors.
 		for range rows {
 			size, err := binary.ReadUvarint(s)
 			if errors.Is(err, io.EOF) {
 				// TODO(rfratto): log; unexpected early EOF
-				return
+				return nil
 			} else if err != nil {
-				yield("", err)
-				return
+				return err
 			}
 
 			switch size {
@@ -234,16 +240,15 @@ func textPageIter(s encoding.Reader, rows int) iter.Seq2[string, error] {
 				nullCount, err := binary.ReadUvarint(s)
 				if errors.Is(err, io.EOF) {
 					// TODO(rfratto): log; unexpected early EOF
-					return
+					return nil
 				} else if err != nil {
-					yield("", err)
-					return
+					return err
 				}
 
 				// Yield nullCount NULLs.
 				for range nullCount {
-					if !yield("", nil) {
-						return
+					if !yield("") {
+						return nil
 					}
 				}
 
@@ -251,13 +256,13 @@ func textPageIter(s encoding.Reader, rows int) iter.Seq2[string, error] {
 				var sb strings.Builder
 				sb.Grow(int(size))
 				if _, err := io.Copy(&sb, io.LimitReader(s, int64(size))); err != nil {
-					yield("", fmt.Errorf("read text: %w", err))
-					return
-				}
-				if !yield(sb.String(), nil) {
-					return
+					return fmt.Errorf("read text: %w", err)
+				} else if !yield(sb.String()) {
+					return nil
 				}
 			}
 		}
-	}
+
+		return nil
+	})
 }

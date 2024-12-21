@@ -14,6 +14,7 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 var errIterationStopped = errors.New("iteration stopped")
@@ -50,30 +51,31 @@ func (r *Reader) Objects(ctx context.Context, tenant string) iter.Seq[string] {
 
 // Streams returns an iterator over all streams for the provided object. If an
 // error is encountered, the iterator returns the error and stops.
-func (r *Reader) Streams(ctx context.Context, object string) iter.Seq2[labels.Labels, error] {
-	return func(yield func(labels.Labels, error) bool) {
-		for stream, err := range r.streams(ctx, object) {
+func (r *Reader) Streams(ctx context.Context, object string) result.Seq[labels.Labels] {
+	return result.Iter(func(yield func(labels.Labels) bool) error {
+		for res := range r.streams(ctx, object) {
+			stream, err := res.Value()
 			if err != nil {
-				yield(nil, fmt.Errorf("iterating streams: %w", err))
-				return
+				return fmt.Errorf("iterating streams: %w", err)
 			}
 
 			lbls := logstreamsmd.Labels(stream.Identifier)
-			if !yield(lbls, nil) {
-				return
+			if !yield(lbls) {
+				return nil
 			}
 		}
-	}
+
+		return nil
+	})
 }
 
-func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[*logstreamsmd.StreamInfo, error] {
+func (r *Reader) streams(ctx context.Context, object string) result.Seq[*logstreamsmd.StreamInfo] {
 	dec := decoder.BucketDecoder(r.bucket, object)
 
-	return func(yield func(*logstreamsmd.StreamInfo, error) bool) {
+	return result.Iter(func(yield func(*logstreamsmd.StreamInfo) bool) error {
 		sections, err := dec.Sections(ctx)
 		if err != nil {
-			yield(nil, fmt.Errorf("reading sections: %w", err))
-			return
+			return fmt.Errorf("reading sections: %w", err)
 		}
 
 		for _, sec := range sections {
@@ -84,17 +86,18 @@ func (r *Reader) streams(ctx context.Context, object string) iter.Seq2[*logstrea
 			streamsDec := dec.StreamsDecoder()
 			streams, err := streamsDec.Streams(ctx, sec)
 			if err != nil {
-				yield(nil, fmt.Errorf("reading streams: %w", err))
-				return
+				return fmt.Errorf("reading streams: %w", err)
 			}
 
 			for _, stream := range streams {
-				if !yield(stream, nil) {
-					return
+				if !yield(stream) {
+					return nil
 				}
 			}
 		}
-	}
+
+		return nil
+	})
 }
 
 // EntriesOptions customizes the filtering behaviour of [Reader.Entries].
@@ -124,18 +127,18 @@ type EntriesOptions struct {
 // Entries returns an iterator over [push.Entry] items found in the object for
 // the provided stream. EntriesOptions provides basic filtering options. If an
 // error is encountered, the iterator returns the error and stops.
-func (r *Reader) Entries(ctx context.Context, object string, stream labels.Labels, opts EntriesOptions) iter.Seq2[push.Entry, error] {
+func (r *Reader) Entries(ctx context.Context, object string, stream labels.Labels, opts EntriesOptions) result.Seq[push.Entry] {
 	// TODO(rfratto): change this remove operation on stream; defer that to a
 	// metadata filter.
 
 	// TODO(rfratto): impl
 	dec := decoder.BucketDecoder(r.bucket, object).StreamsDecoder()
 
-	return func(yield func(push.Entry, error) bool) {
-		for in, err := range r.streams(ctx, object) {
+	return result.Iter(func(yield func(push.Entry) bool) error {
+		for res := range r.streams(ctx, object) {
+			in, err := res.Value()
 			if err != nil {
-				yield(push.Entry{}, fmt.Errorf("reading streams: %w", err))
-				return
+				return fmt.Errorf("reading streams: %w", err)
 			}
 
 			inLabels := logstreamsmd.Labels(in.Identifier)
@@ -143,18 +146,16 @@ func (r *Reader) Entries(ctx context.Context, object string, stream labels.Label
 				continue
 			}
 
-			for entry, err := range newEntryIterator(dec, in, opts).Iter() {
+			for res := range newEntryIterator(dec, in, opts).Iter() {
+				entry, err := res.Value()
 				if err != nil {
-					yield(push.Entry{}, fmt.Errorf("iterating entries: %w", err))
-					return
-				}
-
-				if !yield(entry, nil) {
-					return
+					return fmt.Errorf("iterating entries: %w", err)
+				} else if !yield(entry) {
+					return nil
 				}
 			}
 		}
 
-		yield(push.Entry{}, fmt.Errorf("NYI: Reader.Entries"))
-	}
+		return fmt.Errorf("NYI: Reader.Entries")
+	})
 }

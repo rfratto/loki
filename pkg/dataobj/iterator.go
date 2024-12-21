@@ -3,13 +3,13 @@ package dataobj
 import (
 	"context"
 	"fmt"
-	"iter"
 	"time"
 
 	"github.com/grafana/loki/pkg/push"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 type entryIterator struct {
@@ -26,7 +26,7 @@ func newEntryIterator(dec decoder.StreamsDecoder, stream *logstreamsmd.StreamInf
 	}
 }
 
-func (it *entryIterator) Iter() iter.Seq2[push.Entry, error] {
+func (it *entryIterator) Iter() result.Seq[push.Entry] {
 	// TODO(rfratto): entryIterator needs to do a few things:
 	//
 	// 1. Pull the set of columns that are going to be needed based on opts.
@@ -46,47 +46,45 @@ func (it *entryIterator) Iter() iter.Seq2[push.Entry, error] {
 	//   those rows; this will also require passing additional info to lazy
 	//   iterators so they know which records to skip within the loaded pages.
 
-	return func(yield func(push.Entry, error) bool) {
-		yield(push.Entry{}, fmt.Errorf("entryIterator: NYI"))
-	}
+	return result.Iter(func(yield func(push.Entry) bool) error {
+		return fmt.Errorf("entryIterator: NYI")
+	})
 }
 
-func lazyTimeIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo, pages []*logstreamsmd.PageInfo) iter.Seq2[time.Time, error] {
-	return func(yield func(time.Time, error) bool) {
-		for pageData, err := range dec.ReadPages(ctx, pages) {
+func lazyTimeIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo, pages []*logstreamsmd.PageInfo) result.Seq[time.Time] {
+	return result.Iter(func(yield func(time.Time) bool) error {
+		for res := range dec.ReadPages(ctx, pages) {
+			pageData, err := res.Value()
 			if err != nil {
-				yield(time.Time{}, err)
-				return
+				return err
 			}
 
-			for ts, err := range logstreams.IterTimePage(col, pageData) {
-				if !yield(ts, err) {
-					return
-				}
-				if err != nil {
-					return
+			for res := range logstreams.IterTimePage(col, pageData) {
+				if res.Err() != nil || !yield(res.MustValue()) {
+					return res.Err()
 				}
 			}
 		}
-	}
+
+		return nil
+	})
 }
 
-func lazyTextIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo, pages []*logstreamsmd.PageInfo) iter.Seq2[time.Time, error] {
-	return func(yield func(time.Time, error) bool) {
-		for pageData, err := range dec.ReadPages(ctx, pages) {
+func lazyTextIterator(ctx context.Context, dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo, pages []*logstreamsmd.PageInfo) result.Seq[time.Time] {
+	return result.Iter(func(yield func(time.Time) bool) error {
+		for res := range dec.ReadPages(ctx, pages) {
+			pageData, err := res.Value()
 			if err != nil {
-				yield(time.Time{}, err)
-				return
+				return err
 			}
 
-			for ts, err := range logstreams.IterTimePage(col, pageData) {
-				if !yield(ts, err) {
-					return
-				}
-				if err != nil {
-					return
+			for res := range logstreams.IterTimePage(col, pageData) {
+				if res.Err() != nil || !yield(res.MustValue()) {
+					return res.Err()
 				}
 			}
 		}
-	}
+
+		return nil
+	})
 }

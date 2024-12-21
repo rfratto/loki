@@ -3,7 +3,6 @@ package encoder_test
 import (
 	"bytes"
 	"context"
-	"iter"
 	"testing"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/decoder"
@@ -11,6 +10,7 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
 )
@@ -114,33 +114,11 @@ func Test(t *testing.T) {
 }
 
 func allPages(dec decoder.StreamsDecoder, col *logstreamsmd.ColumnInfo) ([]logstreams.Page, error) {
-	var pages []logstreams.Page
-
 	headers, err := dec.Pages(context.Background(), col)
 	if err != nil {
 		return nil, err
 	}
-
-	it := dec.ReadPages(context.Background(), headers)
-	for page, err := range it {
-		if err != nil {
-			return nil, err
-		}
-		pages = append(pages, page)
-	}
-
-	return pages, nil
-}
-
-func collect[ValueType any](it iter.Seq2[ValueType, error]) ([]ValueType, error) {
-	var values []ValueType
-	for value, err := range it {
-		if err != nil {
-			return nil, err
-		}
-		values = append(values, value)
-	}
-	return values, nil
+	return result.Collect(dec.ReadPages(context.Background(), headers))
 }
 
 func idFromString(s string) logstreamsmd.StreamIdentifier {

@@ -8,6 +8,7 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // StreamsDataset returns a [dataset.Dataset] which reads columns and pages
@@ -25,67 +26,75 @@ type streamsDataset struct {
 	section *filemd.SectionInfo
 }
 
-func (d *streamsDataset) ListColumns(ctx context.Context) ([]dataset.Column, error) {
-	columnDescs, err := d.dec.Columns(ctx, d.section)
-	if err != nil {
-		return nil, err
-	}
-
-	columns := make([]dataset.Column, 0, len(columnDescs))
-	for _, desc := range columnDescs {
-		info := &dataset.ColumnInfo{
-			Name: desc.Info.Name,
-			Type: desc.Info.ValueType,
-
-			RowsCount:        int(desc.Info.RowsCount),
-			UncompressedSize: int(desc.Info.UncompressedSize),
-			CompressedSize:   int(desc.Info.CompressedSize),
-
-			Compression: desc.Info.Compression,
-
-			Statistics: desc.Info.Statistics,
+func (d *streamsDataset) ListColumns(ctx context.Context) result.Seq[dataset.Column] {
+	return result.Iter(func(yield func(dataset.Column) bool) error {
+		columnDescs, err := d.dec.Columns(ctx, d.section)
+		if err != nil {
+			return err
 		}
-		columns = append(columns, &streamsColumn{info: info, ds: d, desc: desc})
-	}
-	return columns, nil
+
+		for _, desc := range columnDescs {
+			info := &dataset.ColumnInfo{
+				Name: desc.Info.Name,
+				Type: desc.Info.ValueType,
+
+				RowsCount:        int(desc.Info.RowsCount),
+				UncompressedSize: int(desc.Info.UncompressedSize),
+				CompressedSize:   int(desc.Info.CompressedSize),
+
+				Compression: desc.Info.Compression,
+
+				Statistics: desc.Info.Statistics,
+			}
+			column := &streamsColumn{info: info, ds: d, desc: desc}
+			if !yield(column) {
+				return nil
+			}
+		}
+
+		return nil
+	})
 }
 
-func (d *streamsDataset) ListPages(ctx context.Context, columns []dataset.Column) ([]dataset.Pages, error) {
-	var pagesList = make([]dataset.Pages, len(columns))
+func (d *streamsDataset) ListPages(ctx context.Context, columns []dataset.Column) result.Seq[dataset.Pages] {
+	return result.Iter(func(yield func(dataset.Pages) bool) error {
+		for _, column := range columns {
+			c, ok := column.(*streamsColumn)
+			if !ok {
+				return fmt.Errorf("unrecognized column %v", column)
+			}
 
-	for i, column := range columns {
-		c, ok := column.(*streamsColumn)
-		if !ok {
-			return nil, fmt.Errorf("unrecognized column %v", c)
+			pages, err := result.Collect(c.Pages(ctx))
+			if err != nil {
+				return err
+			} else if !yield(pages) {
+				return nil
+			}
 		}
-		pages, err := c.Pages(ctx)
-		if err != nil {
-			return nil, err
-		}
-		pagesList[i] = pages
-	}
 
-	return pagesList, nil
+		return nil
+	})
 }
 
-func (d *streamsDataset) ReadPages(ctx context.Context, pages []dataset.Page) ([]page.Data, error) {
-	var descs = make([]*ColumnPageDesc, len(pages))
-	for i, page := range pages {
-		p, ok := page.(*streamsPage)
-		if !ok {
-			return nil, fmt.Errorf("unrecognized page %v", p)
+func (d *streamsDataset) ReadPages(ctx context.Context, pages []dataset.Page) result.Seq[page.Data] {
+	return result.Iter(func(yield func(page.Data) bool) error {
+		var descs = make([]*ColumnPageDesc, len(pages))
+		for i, p := range pages {
+			p, ok := p.(*streamsPage)
+			if !ok {
+				return fmt.Errorf("unrecognized page %v", p)
+			}
+			descs[i] = p.desc
 		}
-		descs[i] = p.desc
-	}
 
-	var dataList = make([]page.Data, 0, len(pages))
-	for page, err := range d.dec.ReadPages(ctx, descs) {
-		if err != nil {
-			return nil, err
+		for res := range d.dec.ReadPages(ctx, descs) {
+			if res.Err() != nil || !yield(res.MustValue().Data) {
+				return res.Err()
+			}
 		}
-		dataList = append(dataList, page.Data)
-	}
-	return dataList, nil
+
+		return nil
+	})
 }
 
 type streamsColumn struct {
@@ -98,27 +107,33 @@ func (c *streamsColumn) Info() *dataset.ColumnInfo {
 	return c.info
 }
 
-func (c *streamsColumn) Pages(ctx context.Context) (dataset.Pages, error) {
-	descs, err := c.ds.dec.Pages(ctx, c.desc)
-	if err != nil {
-		return nil, err
-	}
-	pages := make([]dataset.Page, 0, len(descs))
-	for _, desc := range descs {
-		info := &page.Info{
-			UncompressedSize: int(desc.Page.Info.UncompressedSize),
-			CompressedSize:   int(desc.Page.Info.CompressedSize),
-			CRC32:            desc.Page.Info.Crc32,
-			RowCount:         int(desc.Page.Info.RowsCount),
-
-			Value:       desc.Column.Info.ValueType,
-			Compression: desc.Page.Info.Compression,
-			Encoding:    desc.Page.Info.Encoding,
-			Stats:       desc.Page.Info.Statistics,
+func (c *streamsColumn) Pages(ctx context.Context) result.Seq[dataset.Page] {
+	return result.Iter(func(yield func(dataset.Page) bool) error {
+		descs, err := c.ds.dec.Pages(ctx, c.desc)
+		if err != nil {
+			return err
 		}
-		pages = append(pages, &streamsPage{info: info, ds: c.ds, desc: desc})
-	}
-	return pages, nil
+
+		for _, desc := range descs {
+			info := &page.Info{
+				UncompressedSize: int(desc.Page.Info.UncompressedSize),
+				CompressedSize:   int(desc.Page.Info.CompressedSize),
+				CRC32:            desc.Page.Info.Crc32,
+				RowCount:         int(desc.Page.Info.RowsCount),
+
+				Value:       desc.Column.Info.ValueType,
+				Compression: desc.Page.Info.Compression,
+				Encoding:    desc.Page.Info.Encoding,
+				Stats:       desc.Page.Info.Statistics,
+			}
+
+			if !yield(&streamsPage{info: info, ds: c.ds, desc: desc}) {
+				return nil
+			}
+		}
+
+		return nil
+	})
 }
 
 type streamsPage struct {
@@ -132,8 +147,13 @@ func (p *streamsPage) Info() *page.Info {
 }
 
 func (p *streamsPage) Data(ctx context.Context) (page.Data, error) {
-	for data, err := range p.ds.dec.ReadPages(ctx, []*ColumnPageDesc{p.desc}) {
-		return data.Data, err
+	for res := range p.ds.dec.ReadPages(ctx, []*ColumnPageDesc{p.desc}) {
+		data, err := res.Value()
+		if err != nil {
+			return nil, err
+		} else {
+			return data.Data, nil
+		}
 	}
 	return nil, fmt.Errorf("no page data")
 }

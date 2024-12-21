@@ -4,11 +4,11 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"iter"
 	"math"
 	"slices"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // TODO(rfratto): way more scanner tests.
@@ -124,7 +124,7 @@ func (s *Scanner) AddEntryFilter(column Column, include EntryFilter) error {
 //
 // If a decoding error is encountered during iteration, Iter emits an error and
 // stops.
-func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
+func (s *Scanner) Iter(ctx context.Context) result.Seq[[]ScannerEntry] {
 	type columnData struct {
 		Info       *ColumnInfo
 		Pages      []Page
@@ -134,12 +134,12 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 	}
 
 	type pullIter struct {
-		Iter *columnIter
-		Next func() (ScannerEntry, error, bool)
+		Iter *lazyColumnIter
+		Next func() (result.Result[ScannerEntry], bool)
 		Stop func()
 	}
 
-	return func(yield func([]ScannerEntry, error) bool) {
+	return result.Iter(func(yield func([]ScannerEntry) bool) error {
 		var (
 			columnDataSet = map[Column]*columnData{}
 			columnIters   = map[Column]pullIter{}
@@ -156,7 +156,7 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 				return p, nil
 			}
 
-			pages, err := c.Pages(ctx)
+			pages, err := result.Collect(c.Pages(ctx))
 			if err != nil {
 				return nil, err
 			}
@@ -188,8 +188,8 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 				return pullIter{}, err
 			}
 
-			it := newPagesIter(cd.Pages, s.dataset)
-			next, stop := iter.Pull2(it.Iter(ctx))
+			it := newLazyColumnIter(cd.Pages, s.dataset)
+			next, stop := result.Pull(it.Iter(ctx))
 			columnIters[c] = pullIter{
 				Iter: it,
 				Next: next,
@@ -202,8 +202,7 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 		for column, pageFilter := range s.pageFilters {
 			cd, err := getColumnData(column)
 			if err != nil {
-				yield(nil, err)
-				return
+				return err
 			}
 
 			for i, page := range cd.PageInfos {
@@ -229,8 +228,7 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 		for column := range s.entryFilters {
 			_, err := getColumnData(column)
 			if err != nil {
-				yield(nil, err)
-				return
+				return err
 			}
 		}
 
@@ -280,20 +278,19 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 				// pages at once and minimize GET calls.
 				columnIter, err := getColumnIter(column)
 				if err != nil {
-					yield(nil, err)
-					return
+					return err
 				}
 
 				// Make sure our iter is the on the row we're trying to read. If it's
 				// currently on the same row, this does nothing.
 				columnIter.Iter.Seek(row)
 
-				ent, err, ok := columnIter.Next()
+				res, ok := columnIter.Next()
+				ent, err := res.Value()
 				if !ok {
 					continue
 				} else if err != nil {
-					yield(nil, err)
-					return
+					return err
 				}
 
 				rowEntries[columnIndex].Row = ent.Row
@@ -308,11 +305,13 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 				}
 			}
 
-			if !yield(rowEntries, nil) {
-				return
+			if !yield(rowEntries) {
+				return nil
 			}
 		}
-	}
+
+		return nil
+	})
 }
 
 func getRowOffsets(pages []Page) (totalRows int, offsets []int) {

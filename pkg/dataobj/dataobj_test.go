@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"iter"
 	"os"
 	"slices"
 	"strings"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/grafana/loki/pkg/push"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
@@ -48,7 +48,7 @@ func Test(t *testing.T) {
 
 	// Try to see if the object has all the data we need.
 	{
-		streams, err := collectFailable(reader.Streams(context.Background(), objects[0]))
+		streams, err := result.Collect(reader.Streams(context.Background(), objects[0]))
 		require.NoError(t, err)
 		require.Len(t, streams, len(req.Streams))
 
@@ -60,24 +60,11 @@ func Test(t *testing.T) {
 				GetAllMetadata: true,
 				GetLine:        true,
 			})
-			entries, err := collectFailable(entriesIter)
+			entries, err := result.Collect(entriesIter)
 			require.NoError(t, err)
 			require.Equal(t, stream.Entries, entries, "Mismatched entries for stream %s", stream.Labels)
 		}
 	}
-}
-
-// colectFailable collects all values from an iterator, returning an error if
-// the iterator encounters an error.
-func collectFailable[T any](iter iter.Seq2[T, error]) ([]T, error) {
-	var res []T
-	for v, err := range iter {
-		if err != nil {
-			return res, err
-		}
-		res = append(res, v)
-	}
-	return res, nil
 }
 
 func getObjects(ctx context.Context, bucket objstore.Bucket, dir string) ([]string, error) {
@@ -137,7 +124,8 @@ func Test_stream(t *testing.T) {
 		require.True(t, ok, "missing stream")
 
 		var actual []push.Entry
-		for ent, err := range tenantStream.Iter() {
+		for res := range tenantStream.Iter() {
+			ent, err := res.Value()
 			require.NoError(t, err)
 			actual = append(actual, ent)
 		}

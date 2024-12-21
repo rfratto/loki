@@ -4,10 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // Column holds a Column of data for a given RowType. Records are accumulated
@@ -23,7 +23,7 @@ type Column[RowType any] struct {
 	headRows int // headRows tracks the number of rows in the head page.
 
 	pages    []Page
-	pageIter func(s encoding.Reader, rows int) iter.Seq2[RowType, error]
+	pageIter func(s encoding.Reader, rows int) result.Seq[RowType]
 	curPage  headPage[RowType]
 }
 
@@ -88,8 +88,8 @@ func (c *Column[RowType]) cutPage() {
 
 // Iter returns an iterator over all data in the column. Iteration stops until
 // all rows have been returned or upon encountering an error.
-func (c *Column[RowType]) Iter() iter.Seq2[RowType, error] {
-	return func(yield func(RowType, error) bool) {
+func (c *Column[RowType]) Iter() result.Seq[RowType] {
+	return func(yield func(result.Result[RowType]) bool) {
 		// Iterate over cut pages.
 		for _, page := range c.pages {
 			if !c.iterPage(page, yield) {
@@ -101,12 +101,10 @@ func (c *Column[RowType]) Iter() iter.Seq2[RowType, error] {
 	}
 }
 
-func (c *Column[RowType]) iterPage(p Page, yield func(RowType, error) bool) bool {
-	var zero RowType
-
+func (c *Column[RowType]) iterPage(p Page, yield func(result.Result[RowType]) bool) bool {
 	r, err := p.Reader()
 	if err != nil {
-		yield(zero, err)
+		yield(result.Error[RowType](err))
 		return false
 	}
 	defer r.Close()
@@ -114,11 +112,8 @@ func (c *Column[RowType]) iterPage(p Page, yield func(RowType, error) bool) bool
 	// TODO(rfratto): pool?
 	br := bufio.NewReaderSize(r, 4096)
 
-	for s, err := range c.pageIter(br, int(p.RowCount)) {
-		if err != nil {
-			yield(zero, err)
-			return false
-		} else if !yield(s, nil) {
+	for res := range c.pageIter(br, int(p.RowCount)) {
+		if !yield(res) || res.Err() != nil {
 			return false
 		}
 	}
@@ -278,8 +273,8 @@ func headPageSize[RowType any](p headPage[RowType]) int {
 
 func headPageIter[RowType any](
 	p headPage[RowType],
-	iter func(s encoding.Reader, rows int) iter.Seq2[RowType, error],
-) iter.Seq2[RowType, error] {
+	iter func(s encoding.Reader, rows int) result.Seq[RowType],
+) result.Seq[RowType] {
 
 	curBytes, curRows := p.Data()
 	return iter(bytes.NewReader(curBytes), curRows)

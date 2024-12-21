@@ -6,11 +6,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 type readSeekerDecoder struct {
@@ -98,7 +98,7 @@ func (dec *readSeekerStreamsDecoder) Pages(_ context.Context, col *logstreamsmd.
 	return md.Pages, nil
 }
 
-func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*logstreamsmd.PageInfo) iter.Seq2[logstreams.Page, error] {
+func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*logstreamsmd.PageInfo) result.Seq[logstreams.Page] {
 	readPage := func(page *logstreamsmd.PageInfo) (logstreams.Page, error) {
 		if _, err := dec.r.Seek(int64(page.DataOffset), io.SeekStart); err != nil {
 			return logstreams.Page{}, err
@@ -125,16 +125,13 @@ func (dec *readSeekerStreamsDecoder) ReadPages(_ context.Context, pages []*logst
 		}, nil
 	}
 
-	return func(yield func(logstreams.Page, error) bool) {
+	return result.Iter(func(yield func(logstreams.Page) bool) error {
 		for _, pageHeader := range pages {
 			page, err := readPage(pageHeader)
-			if !yield(page, err) {
-				return
-			}
-
-			if err != nil {
-				return
+			if err != nil || !yield(page) {
+				return err
 			}
 		}
-	}
+		return nil
+	})
 }

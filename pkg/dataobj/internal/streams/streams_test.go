@@ -51,7 +51,8 @@ func Test(t *testing.T) {
 	dec := obj.ReadSeekerDecoder(bytes.NewReader(data))
 
 	var actual []streams.Stream
-	for s, err := range streams.IterStreams(context.TODO(), dec) {
+	for res := range streams.IterStreams(context.TODO(), dec) {
+		s, err := res.Value()
 		require.NoError(t, err)
 		actual = append(actual, s)
 	}

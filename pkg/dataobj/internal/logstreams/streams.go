@@ -5,13 +5,13 @@ package logstreams
 
 import (
 	"context"
-	"iter"
 	"maps"
 	"slices"
 	"time"
 
 	"github.com/grafana/loki/pkg/push"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 )
@@ -70,13 +70,13 @@ func (s *Stream) CutHead() {
 // ID returns the stream's identifier. The returned value must not be modified.
 func (s *Stream) ID() logstreamsmd.StreamIdentifier { return s.id }
 
-func (s *Stream) Iter() iter.Seq2[push.Entry, error] {
+func (s *Stream) Iter() result.Seq[push.Entry] {
 	// Before we iterate, we must backfill all columns to guarantee all columns
 	// have the same number of rows.
 	s.Backfill()
 
-	return func(yield func(push.Entry, error) bool) {
-		pullTs, stopTs := iter.Pull2(s.timestamp.Iter())
+	return result.Iter(func(yield func(push.Entry) bool) error {
+		pullTs, stopTs := result.Pull(s.timestamp.Iter())
 		defer stopTs()
 
 		pullColumns := s.metadataPullers()
@@ -86,28 +86,28 @@ func (s *Stream) Iter() iter.Seq2[push.Entry, error] {
 			}
 		}()
 
-		pullLog, stopLog := iter.Pull2(s.logColumn.Iter())
+		pullLog, stopLog := result.Pull(s.logColumn.Iter())
 		defer stopLog()
 
 		for {
 			var ent push.Entry
 
-			ts, err, ok := pullTs()
+			tsRes, ok := pullTs()
+			ts, err := tsRes.Value()
 			if err != nil {
-				yield(push.Entry{}, err)
-				return
+				return err
 			} else if !ok {
-				return
+				return nil
 			}
 			ent.Timestamp = ts
 
 			for _, pullMetadata := range pullColumns {
-				val, err, ok := pullMetadata.NextValue()
+				valRes, ok := pullMetadata.NextValue()
+				val, err := valRes.Value()
 				if err != nil {
-					yield(push.Entry{}, err)
-					return
+					return err
 				} else if !ok {
-					return
+					return nil
 				} else if val == "" {
 					continue
 				}
@@ -118,20 +118,20 @@ func (s *Stream) Iter() iter.Seq2[push.Entry, error] {
 				})
 			}
 
-			log, err, ok := pullLog()
+			logRes, ok := pullLog()
+			log, err := logRes.Value()
 			if err != nil {
-				yield(push.Entry{}, err)
-				return
+				return err
 			} else if !ok {
-				return
+				return nil
 			}
 
 			ent.Line = log
-			if !yield(ent, nil) {
-				return
+			if !yield(ent) {
+				return nil
 			}
 		}
-	}
+	})
 }
 
 // Timestamp returns the timestamp column. The returned value must be treated
@@ -158,7 +158,7 @@ func (s *Stream) Metadata(name string) *Column[string] {
 
 type metadataPuller struct {
 	Key       string
-	NextValue func() (string, error, bool)
+	NextValue func() (result.Result[string], bool)
 	Stop      func()
 }
 
@@ -169,7 +169,7 @@ func (s *Stream) metadataPullers() []metadataPuller {
 
 	pullers := make([]metadataPuller, 0, len(columnNames))
 	for _, name := range columnNames {
-		next, stop := iter.Pull2(s.metadata[name].Iter())
+		next, stop := result.Pull(s.metadata[name].Iter())
 
 		puller := metadataPuller{
 			Key:       name,

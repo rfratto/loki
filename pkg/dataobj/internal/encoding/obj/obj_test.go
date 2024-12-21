@@ -10,6 +10,7 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,12 +108,13 @@ func Test(t *testing.T) {
 		dset, err := obj.StreamsDataset(streamsDec, sections[0])
 		require.NoError(t, err)
 
-		columns, err := dset.ListColumns(context.TODO())
+		columns, err := result.Collect(dset.ListColumns(context.TODO()))
 		require.NoError(t, err)
 		require.Len(t, columns, 2)
 
 		scan := dataset.NewScanner(dset, columns)
-		for rowEntry, err := range scan.Iter(context.TODO()) {
+		for result := range scan.Iter(context.TODO()) {
+			rowEntry, err := result.Value()
 			require.NoError(t, err)
 
 			for i, colEntry := range rowEntry {

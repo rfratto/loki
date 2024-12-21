@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // A Dataset holds a collection of columns, each of which holds a seuqence of
@@ -16,19 +17,19 @@ import (
 // methods in Dataset.
 type Dataset interface {
 	// ListColumns returns the set of columns in the Dataset.
-	ListColumns(ctx context.Context) ([]Column, error)
+	ListColumns(ctx context.Context) result.Seq[Column]
 
 	// ListPages retrieves a set of pages given a list of columns.
 	// Implementations of Dataset may use ListPages to optimize for batch
 	// reading. The order of [Page]s in the returned slice matches the order of
 	// the columns argument.
-	ListPages(ctx context.Context, columns []Column) ([]Pages, error)
+	ListPages(ctx context.Context, columns []Column) result.Seq[Pages]
 
 	// ReadPages returns the set of page data for the specified pages.
 	// Implementations of Dataset may use ReadPages to optimize for batch
 	// reading. The order of [page.Data] in the returned slice matches the order
 	// of the pages argument.
-	ReadPages(ctx context.Context, pages []Page) ([]page.Data, error)
+	ReadPages(ctx context.Context, pages []Page) result.Seq[page.Data]
 }
 
 // A Column is a sequence of values within a dataset. Columns are split up
@@ -39,7 +40,7 @@ type Column interface {
 	Info() *ColumnInfo
 
 	// Pages returns the set of ordered pages in the column.
-	Pages(ctx context.Context) (Pages, error)
+	Pages(ctx context.Context) result.Seq[Page]
 }
 
 // Pages is a set of [Page]s.
@@ -64,44 +65,50 @@ type buildersDataset struct {
 	builders []*ColumnBuilder
 }
 
-func (d *buildersDataset) ListColumns(ctx context.Context) ([]Column, error) {
-	var columns = make([]Column, len(d.builders))
-	for i, b := range d.builders {
-		columns[i] = column{builder: b}
-	}
-	return columns, nil
+func (d *buildersDataset) ListColumns(ctx context.Context) result.Seq[Column] {
+	return result.Iter(func(yield func(Column) bool) error {
+		for _, b := range d.builders {
+			if !yield(column{builder: b}) {
+				return nil
+			}
+		}
+		return nil
+	})
 }
 
-func (d *buildersDataset) ListPages(ctx context.Context, columns []Column) ([]Pages, error) {
-	pagesList := make([]Pages, len(columns))
+func (d *buildersDataset) ListPages(ctx context.Context, columns []Column) result.Seq[Pages] {
+	return result.Iter(func(yield func(Pages) bool) error {
+		for _, c := range columns {
+			c, ok := c.(column)
+			if !ok {
+				return fmt.Errorf("unrecognized column %v", c)
+			}
 
-	for i, c := range columns {
-		c, ok := c.(column)
-		if !ok {
-			return nil, fmt.Errorf("unrecognized column %v", c)
+			pages, err := result.Collect(c.Pages(ctx))
+			if err != nil {
+				return err
+			} else if !yield(pages) {
+				return nil
+			}
 		}
-		pages, err := c.Pages(ctx)
-		if err != nil {
-			return nil, err
-		}
-		pagesList[i] = pages
-	}
 
-	return pagesList, nil
+		return nil
+	})
 }
 
-func (d *buildersDataset) ReadPages(ctx context.Context, pages []Page) ([]page.Data, error) {
-	dataList := make([]page.Data, len(pages))
-
-	for i, page := range pages {
-		p, ok := page.(*columnPage)
-		if !ok {
-			return nil, fmt.Errorf("unrecognized page %v", p)
+func (d *buildersDataset) ReadPages(ctx context.Context, pages []Page) result.Seq[page.Data] {
+	return result.Iter(func(yield func(page.Data) bool) error {
+		for _, p := range pages {
+			p, ok := p.(*columnPage)
+			if !ok {
+				return fmt.Errorf("unrecognized page %v", p)
+			} else if !yield(p.page.Data) {
+				return nil
+			}
 		}
-		dataList[i] = p.page.Data
-	}
 
-	return dataList, nil
+		return nil
+	})
 }
 
 type column struct {
@@ -114,15 +121,16 @@ func (c column) Info() *ColumnInfo {
 	return c.builder.Info()
 }
 
-func (c column) Pages(ctx context.Context) (Pages, error) {
-	var pages = make([]Page, len(c.builder.Pages()))
-	for i, p := range c.builder.Pages() {
-		pages[i] = &columnPage{
-			info: p.Info(),
-			page: p,
+func (c column) Pages(ctx context.Context) result.Seq[Page] {
+	return result.Iter(func(yield func(Page) bool) error {
+		for _, p := range c.builder.Pages() {
+			if !yield(&columnPage{info: p.Info(), page: p}) {
+				return nil
+			}
 		}
-	}
-	return pages, nil
+
+		return nil
+	})
 }
 
 type columnPage struct {

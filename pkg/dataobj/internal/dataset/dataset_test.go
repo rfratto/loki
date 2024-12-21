@@ -56,7 +56,8 @@ func Test(t *testing.T) {
 	var row int
 
 	for _, p := range column.Pages() {
-		for val, err := range page.Iter(p) {
+		for res := range page.Iter(p) {
+			val, err := res.Value()
 			require.NoError(t, err)
 
 			if !val.IsNil() && val.Type() != datasetmd.VALUE_TYPE_STRING {

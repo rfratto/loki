@@ -2,11 +2,11 @@ package obj
 
 import (
 	"context"
-	"iter"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // Decoders. To cleanly separate the APIs per section, each section has its own
@@ -35,7 +35,7 @@ type (
 		// ReadPages reads the provided set of pages, iterating over their data
 		// matching the argument order. If an error is encountered while retrieving
 		// pages, an error is emitted and iteration stops.
-		ReadPages(ctx context.Context, pages []*ColumnPageDesc) iter.Seq2[*page.Page, error]
+		ReadPages(ctx context.Context, pages []*ColumnPageDesc) result.Seq[*page.Page]
 	}
 )
 

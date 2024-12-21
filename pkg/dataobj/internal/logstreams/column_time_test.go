@@ -42,7 +42,8 @@ func Test_newTimeColumn_Iter(t *testing.T) {
 
 	// Read back times.
 	var actual []time.Time
-	for ts, err := range col.Iter() {
+	for res := range col.Iter() {
+		ts, err := res.Value()
 		require.NoError(t, err)
 		actual = append(actual, ts)
 	}

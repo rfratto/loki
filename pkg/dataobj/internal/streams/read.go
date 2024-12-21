@@ -3,7 +3,6 @@ package streams
 import (
 	"context"
 	"fmt"
-	"iter"
 	"time"
 
 	"github.com/prometheus/prometheus/model/labels"
@@ -13,15 +12,15 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // IterStreams iterates over streams in the provided decoder.
-func IterStreams(ctx context.Context, dec obj.Decoder) iter.Seq2[Stream, error] {
-	return func(yield func(Stream, error) bool) {
+func IterStreams(ctx context.Context, dec obj.Decoder) result.Seq[Stream] {
+	return result.Iter(func(yield func(Stream) bool) error {
 		sections, err := dec.Sections(ctx)
 		if err != nil {
-			yield(Stream{}, err)
-			return
+			return err
 		}
 
 		streamsDec := dec.StreamsDecoder()
@@ -31,52 +30,55 @@ func IterStreams(ctx context.Context, dec obj.Decoder) iter.Seq2[Stream, error] 
 				continue
 			}
 
-			for stream, err := range iterSection(ctx, streamsDec, section) {
-				if !yield(stream, err) || err != nil {
-					return
+			for res := range iterSection(ctx, streamsDec, section) {
+				if res.Err() != nil || !yield(res.MustValue()) {
+					return res.Err()
 				}
 			}
 		}
-	}
+
+		return nil
+	})
 }
 
-func iterSection(ctx context.Context, dec obj.StreamsDecoder, section *filemd.SectionInfo) iter.Seq2[Stream, error] {
-	return func(yield func(Stream, error) bool) {
+func iterSection(ctx context.Context, dec obj.StreamsDecoder, section *filemd.SectionInfo) result.Seq[Stream] {
+	return result.Iter(func(yield func(Stream) bool) error {
 		if section.Type != filemd.SECTION_TYPE_STREAMS {
-			return
+			return nil
 		}
 
 		streamsColumns, err := dec.Columns(ctx, section)
 		if err != nil {
-			yield(Stream{}, err)
-			return
+			return err
 		}
 
 		dset, err := obj.StreamsDataset(dec, section)
 		if err != nil {
-			yield(Stream{}, err)
-			return
+			return err
 		}
 
-		columns, err := dset.ListColumns(ctx)
+		columns, err := result.Collect(dset.ListColumns(ctx))
 		if err != nil {
-			yield(Stream{}, err)
-			return
+			return err
 		}
 
 		scanner := dataset.NewScanner(dset, columns)
-		for rowEntry, err := range scanner.Iter(ctx) {
+		for result := range scanner.Iter(ctx) {
+			rowEntry, err := result.Value()
 			if err != nil {
-				yield(Stream{}, err)
-				return
+				return err
 			}
 
 			stream, err := decodeRow(streamsColumns, rowEntry)
-			if !yield(stream, err) || err != nil {
-				return
+			if err != nil {
+				return err
+			} else if !yield(stream) {
+				return nil
 			}
 		}
-	}
+
+		return nil
+	})
 }
 
 func decodeRow(columns []*streamsmd.ColumnDesc, row []dataset.ScannerEntry) (Stream, error) {

@@ -6,38 +6,43 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"iter"
 	"time"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/logstreamsmd"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // IterTimePage returns an iterator over a page of values in a timestamp-based
 // column. IterTextPage yields an error if the column does not contain time or
 // the page could not be read.
-func IterTimePage(col *logstreamsmd.ColumnInfo, page Page) iter.Seq2[time.Time, error] {
-	return func(yield func(time.Time, error) bool) {
-		var zero time.Time
-
+func IterTimePage(col *logstreamsmd.ColumnInfo, page Page) result.Seq[time.Time] {
+	return result.Iter(func(yield func(time.Time) bool) error {
 		if !isTimeColumn(col) {
-			yield(zero, fmt.Errorf("column type %s does not contain timestamp data", col.Type))
-			return
+			return fmt.Errorf("column type %s does not contain timestamp data", col.Type)
 		}
 
 		rc, err := page.Reader()
 		if err != nil {
-			yield(zero, fmt.Errorf("opening page reader: %w", err))
-			return
+			return fmt.Errorf("opening page reader: %w", err)
 		}
 		defer rc.Close()
 
 		if page.Encoding != logstreamsmd.ENCODING_TYPE_DELTA {
-			yield(zero, fmt.Errorf("unsupported encoding %s for timestamp column", page.Encoding))
-			return
+			return fmt.Errorf("unsupported encoding %s for timestamp column", page.Encoding)
 		}
-		timePageIter(bufio.NewReader(rc), page.RowCount)(yield)
-	}
+
+		for res := range timePageIter(bufio.NewReader(rc), page.RowCount) {
+			ts, err := res.Value()
+			if err != nil {
+				return err
+			} else if !yield(ts) {
+				return nil
+			}
+		}
+
+		return nil
+	})
 }
 
 func isTimeColumn(col *logstreamsmd.ColumnInfo) bool {
@@ -173,38 +178,38 @@ func (p *headTimePage) Flush() (Page, error) {
 
 // timePageIter returns an iterator that reads delta-encoded timestamps from a
 // scanner.
-func timePageIter(s encoding.Reader, rows int) iter.Seq2[time.Time, error] {
-	return func(yield func(time.Time, error) bool) {
+func timePageIter(s encoding.Reader, rows int) result.Seq[time.Time] {
+	return result.Iter(func(yield func(time.Time) bool) error {
 		if rows == 0 {
-			return
+			return nil
 		}
 
 		first, err := binary.ReadVarint(s)
 		if errors.Is(err, io.EOF) {
-			return
+			return nil
 		} else if err != nil {
-			yield(time.Time{}, err)
-			return
+			return err
 		}
 
 		ts := time.Unix(0, first).UTC()
-		if !yield(ts, nil) {
-			return
+		if !yield(ts) {
+			return nil
 		}
 
 		for range rows - 1 {
 			delta, err := binary.ReadVarint(s)
 			if errors.Is(err, io.EOF) {
-				return
+				return nil
 			} else if err != nil {
-				yield(time.Time{}, err)
-				return
+				return err
 			}
 
 			ts = ts.Add(time.Duration(delta))
-			if !yield(ts, nil) {
-				return
+			if !yield(ts) {
+				return nil
 			}
 		}
-	}
+
+		return nil
+	})
 }

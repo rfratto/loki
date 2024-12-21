@@ -33,7 +33,8 @@ func Test_NewTextColumn(t *testing.T) {
 	require.Greater(t, len(col.pages), 0, "expected at least one page")
 
 	var actual []string
-	for text, err := range col.Iter() {
+	for res := range col.Iter() {
+		text, err := res.Value()
 		require.NoError(t, err)
 		actual = append(actual, text)
 	}
@@ -65,7 +66,8 @@ func Test_headTextPage_Iter(t *testing.T) {
 	expect := []string{"hello", "", "world", "", "", "!"}
 
 	var actual []string
-	for text, err := range headPageIter(&p, textPageIter) {
+	for res := range headPageIter(&p, textPageIter) {
+		text, err := res.Value()
 		require.NoError(t, err)
 		actual = append(actual, text)
 	}
