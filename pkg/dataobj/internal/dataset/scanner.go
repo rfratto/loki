@@ -188,7 +188,7 @@ func (s *Scanner) Iter(ctx context.Context) iter.Seq2[[]ScannerEntry, error] {
 				return pullIter{}, err
 			}
 
-			it := newColumnIter(c, cd.Pages, s.dataset)
+			it := newPagesIter(cd.Pages, s.dataset)
 			next, stop := iter.Pull2(it.Iter(ctx))
 			columnIters[c] = pullIter{
 				Iter: it,

@@ -7,10 +7,8 @@ import (
 	"golang.org/x/net/context"
 )
 
-// columnIter iterates over entries in a column, lazily loading pages on
-// demand.
-type columnIter struct {
-	column     Column
+// lazyColumnIter iterates over pages, lazily loading page data on demand.
+type lazyColumnIter struct {
 	pages      []Page
 	rowOffsets []int
 	getter     Dataset
@@ -18,12 +16,11 @@ type columnIter struct {
 	row int
 }
 
-func newColumnIter(column Column, pages []Page, dataset Dataset) *columnIter {
-	_, offsets := getRowOffsets(pages)
+func newLazyColumnIter(columnPages []Page, dataset Dataset) *lazyColumnIter {
+	_, offsets := getRowOffsets(columnPages)
 
-	return &columnIter{
-		column:     column,
-		pages:      pages,
+	return &lazyColumnIter{
+		pages:      columnPages,
 		rowOffsets: offsets,
 		getter:     dataset,
 	}
@@ -31,7 +28,7 @@ func newColumnIter(column Column, pages []Page, dataset Dataset) *columnIter {
 
 // Seek sets the row number for the next row to read. If Seek is called
 // mid-iteration, the provided row number will be the next row emitted.
-func (it *columnIter) Seek(row int) {
+func (it *lazyColumnIter) Seek(row int) {
 	it.row = row
 }
 
@@ -40,7 +37,7 @@ func (it *columnIter) Seek(row int) {
 // pages or rows.
 //
 // An Iter may be re-consumed by calling it.Seek(0).
-func (it *columnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
+func (it *lazyColumnIter) Iter(ctx context.Context) iter.Seq2[ScannerEntry, error] {
 	return func(yield func(ScannerEntry, error) bool) {
 		var (
 			curPage     Page
@@ -116,7 +113,7 @@ func iterPage(startRow int, p Page, data page.Data) iter.Seq2[ScannerEntry, erro
 
 // pageForRow returns the page that contains the provided row number. If row is
 // out of bounds of all pages, pageForRow returns nil.
-func (it *columnIter) pageForRow(row int) (p Page, startRow, endRow int) {
+func (it *lazyColumnIter) pageForRow(row int) (p Page, startRow, endRow int) {
 	for i, page := range it.pages {
 		pageStart := it.rowOffsets[i]
 		pageEnd := pageStart + int(page.Info().RowCount) - 1
@@ -132,7 +129,7 @@ func (it *columnIter) pageForRow(row int) (p Page, startRow, endRow int) {
 // preloadPages preloads a set of pages in bulk across the following iterators.
 // Pages for which the iterators have yet to fetch for their upcoming row will
 // be retrieved in a batch.
-func preloadPages(ctx context.Context, it ...*columnIter) error {
+func preloadPages(ctx context.Context, it ...*lazyColumnIter) error {
 	// TODO(rfratto): impl (and use!) this will require moving some additional
 	// state out of the Iter() loop and into the columnIter itself.
 	panic("NYI")
