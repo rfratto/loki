@@ -10,6 +10,22 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
+// TODO(rfratto): Having datatset.Column but page.Page is getting weird.
+//
+// 1. Move encoding/page to dataset/page and create a daataset/column with
+//    column-wide utilities.
+//
+// 2. Update page.Page to page.Memory, and then move the Page interface to the
+//    page package. Also move Column to column.Column.
+//
+// 3. Move the contents of the encoding package to streamio for "streaming
+//    i/o". streamio.Reader, streamio.Writer, streamio.WriteUvarint, etc.
+//
+// 4. Relocate encoding/obj to encoding.
+//
+// 5. Update other packages to operate on dataset.Dataset where appropriate
+//    (though it looks like most things have been updated by now).
+
 // A Dataset holds a collection of columns, each of which holds a seuqence of
 // [page.Value] entries.
 //
