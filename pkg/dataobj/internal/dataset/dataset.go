@@ -16,7 +16,8 @@ import (
 // Dataset is read-only; callers must not modify any of the values returned by
 // methods in Dataset.
 type Dataset interface {
-	// ListColumns returns the set of columns in the Dataset.
+	// ListColumns returns the set of columns in the Dataset. The return order of
+	// ListColumns must be consistent.
 	ListColumns(ctx context.Context) result.Seq[Column]
 
 	// ListPages retrieves a set of pages given a list of columns.

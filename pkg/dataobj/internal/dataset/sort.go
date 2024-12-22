@@ -1,0 +1,131 @@
+package dataset
+
+import (
+	"context"
+	"fmt"
+	"slices"
+
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
+)
+
+// Sort creates a new Dataset with rows sorted by the given columns in
+// ascending order. The order of columns in the new Dataset will be the same as
+// the original dataset.
+//
+// If columns is empty or if the columns contain no data, Sort will return the
+// original dataset.
+func Sort(ctx context.Context, dataset Dataset, columns []Column, pageSizeHint int) (Dataset, error) {
+	if len(columns) == 0 {
+		return dataset, nil
+	}
+
+	// First, we need to read all the values from columns.
+	type sortData struct {
+		Row    int          // Original row of the sorted data.
+		Values []page.Value // Values to sort the row by.
+	}
+	var sortDataList []sortData
+
+	scanner := NewScanner(dataset, columns)
+	for ent := range scanner.Iter(ctx) {
+		row, err := ent.Value()
+		if err != nil {
+			return nil, fmt.Errorf("iterating over existing dataset: %w", err)
+		} else if len(row) != len(columns) {
+			return nil, fmt.Errorf("row length mismatch: expected %d, got %d", len(columns), len(row))
+		}
+
+		values := make([]page.Value, len(row))
+		for i, v := range row {
+			values[i] = v.Value
+		}
+		sortDataList = append(sortDataList, sortData{
+			Row:    row[0].Row,
+			Values: values,
+		})
+	}
+
+	if len(sortDataList) == 0 {
+		return dataset, nil
+	}
+
+	// Sort all of our rows by the columns we specified.
+	slices.SortStableFunc(sortDataList, func(a sortData, b sortData) int {
+		for i, aVal := range a.Values {
+			if i >= len(b.Values) {
+				break
+			}
+			bVal := b.Values[i]
+
+			// The moment a<b or a>b for any column, we can return the result.
+			// Otherwise, the rows are equal (in terms of the sorting columns).
+			switch page.CompareValues(aVal, bVal) {
+			case -1:
+				return -1
+			case 1:
+				return 1
+			}
+		}
+
+		return 0
+	})
+
+	// Now, we create a new set of columns. We fill them with rows matching the order of sortDataList.
+	allColumns, err := result.Collect(dataset.ListColumns(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("listing columns: %w", err)
+	}
+
+	newColumns := make([]*ColumnBuilder, 0, len(allColumns))
+	for _, origColumn := range allColumns {
+		origInfo := origColumn.Info()
+		pages, err := result.Collect(origColumn.Pages(ctx))
+		if err != nil {
+			return nil, fmt.Errorf("getting pages: %w", err)
+		} else if len(pages) == 0 {
+			return nil, fmt.Errorf("unexpected column with no pages")
+		}
+
+		newColumn, err := NewColumnBuilder(origInfo.Name, page.BuilderOptions{
+			PageSizeHint: pageSizeHint,
+			Value:        origInfo.Type,
+			Encoding:     pages[0].Info().Encoding,
+			Compression:  origInfo.Compression,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating new column: %w", err)
+		}
+
+		// TODO(rfratto): Rebuild the column without needing to cache everything in
+		// memory. This is mainly going to require updating newLazyColumnIter to
+		// track its state outside of the iterator so we can avoid constantly
+		// rereading pages.
+		var columnValues []page.Value
+
+		it := newLazyColumnIter(pages, dataset)
+		for scannerEntry := range it.Iter(ctx) {
+			scannerEntry, err := scannerEntry.Value()
+			if err != nil {
+				return nil, fmt.Errorf("iterating over column: %w", err)
+			}
+			columnValues = append(columnValues, scannerEntry.Value)
+		}
+
+		if len(columnValues) != len(sortDataList) {
+			return nil, fmt.Errorf("column length mismatch: expected %d, got %d", len(sortDataList), len(columnValues))
+		}
+
+		// Now, we need to reorder the column values based on the sort order.
+		for i, sortData := range sortDataList {
+			if err := newColumn.Append(i, columnValues[sortData.Row]); err != nil {
+				return nil, fmt.Errorf("appending value: %w", err)
+			}
+		}
+
+		newColumn.Flush()
+		newColumns = append(newColumns, newColumn)
+	}
+
+	return FromBuilders(newColumns), nil
+}
