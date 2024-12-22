@@ -97,28 +97,43 @@ func Sort(ctx context.Context, dataset Dataset, columns []Column, pageSizeHint i
 			return nil, fmt.Errorf("creating new column: %w", err)
 		}
 
-		// TODO(rfratto): Rebuild the column without needing to cache everything in
-		// memory. This is mainly going to require updating newLazyColumnIter to
-		// track its state outside of the iterator so we can avoid constantly
-		// rereading pages.
-		var columnValues []page.Value
-
-		it := newLazyColumnIter(pages, dataset)
-		for scannerEntry := range it.Iter(ctx) {
-			scannerEntry, err := scannerEntry.Value()
-			if err != nil {
-				return nil, fmt.Errorf("iterating over column: %w", err)
-			}
-			columnValues = append(columnValues, scannerEntry.Value)
-		}
-
-		if len(columnValues) != len(sortDataList) {
-			return nil, fmt.Errorf("column length mismatch: expected %d, got %d", len(sortDataList), len(columnValues))
-		}
-
-		// Now, we need to reorder the column values based on the sort order.
+		// The new column becomes populated with sorted data by iterating over
+		// values in the original column in sorted order. To minimize the memory
+		// impact of this, we only load in values from one page at a time.
+		//
+		// Loading in the entire column would have a larger memory overhead than
+		// sortDataList, as that only contains columns to sort on, which are
+		// typically much smaller in size.
+		//
+		// Loading in the entire page is more memory-efficient, but comes at the
+		// cost of a lot of page loads for very unsorted data.
+		var (
+			curPage       Page         // Current page for iteration.
+			curPageValues []page.Value // Values for the current page.
+		)
 		for i, sortData := range sortDataList {
-			if err := newColumn.Append(i, columnValues[sortData.Row]); err != nil {
+			// To avoid downloading the page for each row, we cache the most recent
+			// page and its values. This way, we only need to read a page when our
+			// sorted row changes pages.
+			nextPage, rowInPage := pageForRow(pages, sortData.Row)
+			if nextPage == nil {
+				return nil, fmt.Errorf("row %d not found in column", sortData.Row)
+			} else if nextPage != curPage {
+				curPage = nextPage
+
+				data, err := curPage.Data(ctx)
+				if err != nil {
+					return nil, fmt.Errorf("getting page data: %w", err)
+				}
+
+				rawPage := page.Raw(curPage.Info(), data)
+				curPageValues, err = result.Collect(page.Iter(rawPage))
+				if err != nil {
+					return nil, fmt.Errorf("reading page: %w", err)
+				}
+			}
+
+			if err := newColumn.Append(i, curPageValues[rowInPage]); err != nil {
 				return nil, fmt.Errorf("appending value: %w", err)
 			}
 		}
@@ -128,4 +143,22 @@ func Sort(ctx context.Context, dataset Dataset, columns []Column, pageSizeHint i
 	}
 
 	return FromBuilders(newColumns), nil
+}
+
+// pageForRow returns the page that contains the provided column row number
+// along with the relative row number for that page.
+func pageForRow(pages []Page, row int) (Page, int) {
+	startRow := 0
+
+	for _, page := range pages {
+		info := page.Info()
+
+		if row >= startRow && row < startRow+info.RowCount {
+			return page, row - startRow
+		}
+
+		startRow += info.RowCount
+	}
+
+	return nil, -1
 }
