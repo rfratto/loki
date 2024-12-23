@@ -6,9 +6,9 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page/delta"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/delta"
 	"github.com/stretchr/testify/require"
 )
 

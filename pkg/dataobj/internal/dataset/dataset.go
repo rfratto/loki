@@ -6,14 +6,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // TODO(rfratto): Having datatset.Column but page.Page is getting weird.
 //
 // 1. Move encoding/page to dataset/page and create a daataset/column with
-//    column-wide utilities.
+//    column-wide utilities. (DONE)
 //
 // 2. Update page.Page to page.Memory, and then move the Page interface to the
 //    page package. Also move Column to column.Column.

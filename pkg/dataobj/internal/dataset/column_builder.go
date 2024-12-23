@@ -3,10 +3,10 @@ package dataset
 import (
 	"fmt"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 
-	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/all" // Import encoders
+	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page/all" // Import encoders
 )
 
 // A ColumnBuilder builds a sequence of [page.Value] entries of a common type

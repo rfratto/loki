@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/bitmap"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page/bitmap"
 	"github.com/stretchr/testify/require"
 )
 

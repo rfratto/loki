@@ -7,9 +7,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page/all" // Import encodings
+	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page/all" // Import encodings
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 

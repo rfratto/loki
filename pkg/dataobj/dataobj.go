@@ -31,6 +31,12 @@ import (
 // entire section, and load it in as a dataset. This would also serve as
 // another cache artifact (section) that would live alongside page and column
 // caches.
+//
+// Caching implementations would likely want to check for the existence of the
+// stripe in the cache before falling back to column-level operations. This
+// would have a knock-on effect of keeping stripes alive in the cache longer,
+// but they can still get evicted once the cache is full and they weren't used
+// recently enough.
 
 // TODO(rfratto): validate the BuilderConfig with min/max limits; page size and
 // metadata size should be >4KB and object size should be <3GB (there's an

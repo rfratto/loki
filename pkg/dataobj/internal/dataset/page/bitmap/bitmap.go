@@ -52,8 +52,8 @@ import (
 	"fmt"
 	"math/bits"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 )
 
