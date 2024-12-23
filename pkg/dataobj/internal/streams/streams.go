@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/obj"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
@@ -83,7 +83,7 @@ func (s *Streams) getOrAddStream(streamLabels labels.Labels) *Stream {
 //
 // Streams are encoded in the order they were first appended.
 func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
-	minTimestampColumn, err := dataset.NewColumnBuilder("", page.BuilderOptions{
+	minTimestampColumn, err := column.NewBuilder("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -93,7 +93,7 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating minimum timestamp column: %w", err)
 	}
 
-	maxTimestampColumn, err := dataset.NewColumnBuilder("", page.BuilderOptions{
+	maxTimestampColumn, err := column.NewBuilder("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -103,7 +103,7 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 		return fmt.Errorf("creating maximum timestamp column: %w", err)
 	}
 
-	recordsCountColumn, err := dataset.NewColumnBuilder("", page.BuilderOptions{
+	recordsCountColumn, err := column.NewBuilder("", page.BuilderOptions{
 		PageSizeHint: pageSize,
 		Value:        datasetmd.VALUE_TYPE_INT64,
 		Encoding:     datasetmd.ENCODING_TYPE_DELTA,
@@ -114,17 +114,17 @@ func (s *Streams) WriteTo(enc *obj.Encoder, pageSize, metadataSize int) error {
 	}
 
 	var (
-		labelColumns      = []*dataset.ColumnBuilder{}
+		labelColumns      = []*column.Builder{}
 		labelColumnLookup = map[string]int{} // Name to index
 	)
 
-	getLabelColumn := func(name string) (*dataset.ColumnBuilder, error) {
+	getLabelColumn := func(name string) (*column.Builder, error) {
 		idx, ok := labelColumnLookup[name]
 		if ok {
 			return labelColumns[idx], nil
 		}
 
-		labelColumn, err := dataset.NewColumnBuilder(name, page.BuilderOptions{
+		labelColumn, err := column.NewBuilder(name, page.BuilderOptions{
 			PageSizeHint: pageSize,
 			Value:        datasetmd.VALUE_TYPE_STRING,
 			Encoding:     datasetmd.ENCODING_TYPE_PLAIN,

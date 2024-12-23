@@ -6,13 +6,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
 
 // TODO(rfratto): Having datatset.Column but page.Page is getting weird.
 //
-// 1. Move encoding/page to dataset/page and create a daataset/column with
+// 1. Move encoding/page to dataset/page and create a dataset/column with
 //    column-wide utilities. (DONE)
 //
 // 2. Update page.Page to page.Memory, and then move the Page interface to the
@@ -54,7 +55,7 @@ type Dataset interface {
 // portion of the column at a time.
 type Column interface {
 	// Info returns the metadata for the Column.
-	Info() *ColumnInfo
+	Info() *column.Info
 
 	// Pages returns the set of ordered pages in the column.
 	Pages(ctx context.Context) result.Seq[Page]
@@ -74,18 +75,18 @@ type Page interface {
 
 // FromBuilders returns an in-memory [Dataset] from the given list of
 // [ColumnBuilder]s.
-func FromBuilders(builders []*ColumnBuilder) Dataset {
+func FromBuilders(builders []*column.Builder) Dataset {
 	return &buildersDataset{builders: builders}
 }
 
 type buildersDataset struct {
-	builders []*ColumnBuilder
+	builders []*column.Builder
 }
 
 func (d *buildersDataset) ListColumns(ctx context.Context) result.Seq[Column] {
 	return result.Iter(func(yield func(Column) bool) error {
 		for _, b := range d.builders {
-			if !yield(column{builder: b}) {
+			if !yield(memColumn{builder: b}) {
 				return nil
 			}
 		}
@@ -96,7 +97,7 @@ func (d *buildersDataset) ListColumns(ctx context.Context) result.Seq[Column] {
 func (d *buildersDataset) ListPages(ctx context.Context, columns []Column) result.Seq[Pages] {
 	return result.Iter(func(yield func(Pages) bool) error {
 		for _, c := range columns {
-			c, ok := c.(column)
+			c, ok := c.(memColumn)
 			if !ok {
 				return fmt.Errorf("unrecognized column %v", c)
 			}
@@ -128,17 +129,17 @@ func (d *buildersDataset) ReadPages(ctx context.Context, pages []Page) result.Se
 	})
 }
 
-type column struct {
-	builder *ColumnBuilder
+type memColumn struct {
+	builder *column.Builder
 }
 
-func (c column) Info() *ColumnInfo {
+func (c memColumn) Info() *column.Info {
 	// Columns may change over time so we don't cache the result of
 	// c.builder.Info().
 	return c.builder.Info()
 }
 
-func (c column) Pages(ctx context.Context) result.Seq[Page] {
+func (c memColumn) Pages(ctx context.Context) result.Seq[Page] {
 	return result.Iter(func(yield func(Page) bool) error {
 		for _, p := range c.builder.Pages() {
 			if !yield(&columnPage{info: p.Info(), page: p}) {

@@ -1,4 +1,5 @@
-package dataset
+// Package column defines a dataset column, a collection pof pages.
+package column
 
 import (
 	"fmt"
@@ -6,13 +7,13 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 
-	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page/all" // Import encoders
+	_ "github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page/all" // Register all page encodings.
 )
 
-// A ColumnBuilder builds a sequence of [page.Value] entries of a common type
-// into a column. Values are accumulated in a buffer and then flushed to a
-// [Page] once the amount of values exceeds a configurable size.
-type ColumnBuilder struct {
+// A Builder builds a sequence of [page.Value] entries of a common type into a
+// column. Values are accumulated in a buffer and then flushed to a [Page] once
+// the amount of values exceeds a configurable size.
+type Builder struct {
 	name string
 	opts page.BuilderOptions
 
@@ -22,16 +23,15 @@ type ColumnBuilder struct {
 	builder *page.Builder
 }
 
-// NewColumnBuilder creates a new ColumnBuilder from the optional name and the
-// provided options. NewColumnBuilder returns an error if the options are
-// invalid.
-func NewColumnBuilder(name string, opts page.BuilderOptions) (*ColumnBuilder, error) {
+// NewBuilder creates a new Builder from the optional name and the provided
+// options. NewBuilder returns an error if the options are invalid.
+func NewBuilder(name string, opts page.BuilderOptions) (*Builder, error) {
 	builder, err := page.NewBuilder(opts)
 	if err != nil {
 		return nil, fmt.Errorf("creating buffer: %w", err)
 	}
 
-	return &ColumnBuilder{
+	return &Builder{
 		name: name,
 		opts: opts,
 
@@ -39,12 +39,12 @@ func NewColumnBuilder(name string, opts page.BuilderOptions) (*ColumnBuilder, er
 	}, nil
 }
 
-// Append adds a new value to the ColumnBuilder with the given row value. If
-// the row number is more than the current number of rows in the ColumnBuilder,
-// nulls are added up to the new row.
+// Append adds a new value to the Builder with the given row value. If the row
+// number is more than the current number of rows in the Builder, nulls are
+// added up to the new row.
 //
 // Append returns an error if the row number is out of order.
-func (c *ColumnBuilder) Append(row int, value page.Value) error {
+func (c *Builder) Append(row int, value page.Value) error {
 	if row < c.rows {
 		return fmt.Errorf("row %d is older than current row %d", row, c.rows)
 	}
@@ -66,9 +66,9 @@ func (c *ColumnBuilder) Append(row int, value page.Value) error {
 	panic("column.Append: failed to append value to fresh buffer")
 }
 
-// Backfill adds NULLs into ColumnBuilder up to the provided row number. If
-// values exist up to the row number, Backfill does nothing.
-func (c *ColumnBuilder) Backfill(row int) {
+// Backfill adds NULLs into Builder up to the provided row number. If values
+// exist up to the row number, Backfill does nothing.
+func (c *Builder) Backfill(row int) {
 	// We give two attempts to append the data to the buffer; if the buffer is
 	// full, we cut a page and then append again to the newly reset buffer.
 	//
@@ -84,7 +84,7 @@ func (c *ColumnBuilder) Backfill(row int) {
 	panic("column.Backfill: failed to append value to fresh buffer")
 }
 
-func (c *ColumnBuilder) backfill(row int) bool {
+func (c *Builder) backfill(row int) bool {
 	for row > c.rows {
 		if !c.builder.AppendNull() {
 			return false
@@ -95,7 +95,7 @@ func (c *ColumnBuilder) backfill(row int) bool {
 	return true
 }
 
-func (c *ColumnBuilder) append(row int, value page.Value) bool {
+func (c *Builder) append(row int, value page.Value) bool {
 	for row > c.rows {
 		if !c.builder.AppendNull() {
 			return false
@@ -108,7 +108,7 @@ func (c *ColumnBuilder) append(row int, value page.Value) bool {
 
 // Flush flushes the current buffer and stores it as a [page.Page]. Flush does
 // nothing if there are no rows in the buffer.
-func (c *ColumnBuilder) Flush() {
+func (c *Builder) Flush() {
 	if c.builder.Rows() == 0 {
 		return
 	}
@@ -124,13 +124,13 @@ func (c *ColumnBuilder) Flush() {
 // modify this slice.
 //
 // Any unflushed data is not included in the returned slice of Pages. To make
-// sure all data is available, call [ColumnBuilder.Flush] before calling Pages.
-func (c *ColumnBuilder) Pages() []*page.Page {
+// sure all data is available, call [Builder.Flush] before calling Pages.
+func (c *Builder) Pages() []*page.Page {
 	return c.pages
 }
 
-// ColumnInfo describes a column.
-type ColumnInfo struct {
+// Info describes a column.
+type Info struct {
 	Name string              // Name of the column, if any.
 	Type datasetmd.ValueType // Type of values in the column.
 
@@ -143,15 +143,15 @@ type ColumnInfo struct {
 	Statistics *datasetmd.Statistics // Optional statistics for the column.
 }
 
-// Info returns [ColumnInfo] for the column being built.
+// Info returns [Info] for the column being built.
 //
 // Any unflushed data is not included in calculated info. To make sure all data
-// is available, call [ColumnBuilder.Flush] before calling Pages.
+// is available, call [Builder.Flush] before calling Pages.
 //
 // By default, ColumnInfo.Statistics is nil. Callers must manually compute
 // statistics for columns if needed.
-func (c *ColumnBuilder) Info() *ColumnInfo {
-	info := ColumnInfo{
+func (c *Builder) Info() *Info {
+	info := Info{
 		Name: c.name,
 		Type: c.opts.Value,
 

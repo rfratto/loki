@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding/obj"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
@@ -27,10 +28,10 @@ func Test(t *testing.T) {
 		Compression:  datasetmd.COMPRESSION_TYPE_NONE,
 	}
 
-	columnFirstName, err := dataset.NewColumnBuilder("first_name", opts)
+	columnFirstName, err := column.NewBuilder("first_name", opts)
 	require.NoError(t, err)
 
-	columnLastName, err := dataset.NewColumnBuilder("last_name", opts)
+	columnLastName, err := column.NewBuilder("last_name", opts)
 	require.NoError(t, err)
 
 	type name struct {

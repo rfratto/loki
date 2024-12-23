@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
@@ -17,7 +18,7 @@ func TestSort(t *testing.T) {
 		expect = []int64{1, 2, 3, 4, 5, 6, 7, 8, 9}
 	)
 
-	column, err := dataset.NewColumnBuilder("", page.BuilderOptions{
+	col, err := column.NewBuilder("", page.BuilderOptions{
 		PageSizeHint: 1, // Generate a ton of pages.
 
 		Value:       datasetmd.VALUE_TYPE_INT64,
@@ -27,11 +28,11 @@ func TestSort(t *testing.T) {
 	require.NoError(t, err)
 
 	for i, v := range in {
-		require.NoError(t, column.Append(i, page.Int64Value(v)))
+		require.NoError(t, col.Append(i, page.Int64Value(v)))
 	}
-	column.Flush()
+	col.Flush()
 
-	dset := dataset.FromBuilders([]*dataset.ColumnBuilder{column})
+	dset := dataset.FromBuilders([]*column.Builder{col})
 	dsetColumns, err := result.Collect(dset.ListColumns(context.Background()))
 	require.NoError(t, err)
 

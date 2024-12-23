@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/filemd"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/streamsmd"
@@ -34,7 +35,7 @@ func (d *streamsDataset) ListColumns(ctx context.Context) result.Seq[dataset.Col
 		}
 
 		for _, desc := range columnDescs {
-			info := &dataset.ColumnInfo{
+			info := &column.Info{
 				Name: desc.Info.Name,
 				Type: desc.Info.ValueType,
 
@@ -98,12 +99,12 @@ func (d *streamsDataset) ReadPages(ctx context.Context, pages []dataset.Page) re
 }
 
 type streamsColumn struct {
-	info *dataset.ColumnInfo
+	info *column.Info
 	ds   *streamsDataset
 	desc *streamsmd.ColumnDesc
 }
 
-func (c *streamsColumn) Info() *dataset.ColumnInfo {
+func (c *streamsColumn) Info() *column.Info {
 	return c.info
 }
 

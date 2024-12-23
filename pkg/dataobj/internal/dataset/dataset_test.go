@@ -3,7 +3,7 @@ package dataset_test
 import (
 	"testing"
 
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
 	"github.com/stretchr/testify/assert"
@@ -24,7 +24,7 @@ func Test(t *testing.T) {
 		"goodbye",
 	}
 
-	column, err := dataset.NewColumnBuilder("", page.BuilderOptions{
+	column, err := column.NewBuilder("", page.BuilderOptions{
 		// We want to set page size hint low enough to create more than one page,
 		// but high enough that we'll have pages with more than one row.
 		PageSizeHint: 10,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
@@ -77,7 +78,7 @@ func Sort(ctx context.Context, dataset Dataset, columns []Column, pageSizeHint i
 		return nil, fmt.Errorf("listing columns: %w", err)
 	}
 
-	newColumns := make([]*ColumnBuilder, 0, len(allColumns))
+	newColumns := make([]*column.Builder, 0, len(allColumns))
 	for _, origColumn := range allColumns {
 		origInfo := origColumn.Info()
 		pages, err := result.Collect(origColumn.Pages(ctx))
@@ -87,7 +88,7 @@ func Sort(ctx context.Context, dataset Dataset, columns []Column, pageSizeHint i
 			return nil, fmt.Errorf("unexpected column with no pages")
 		}
 
-		newColumn, err := NewColumnBuilder(origInfo.Name, page.BuilderOptions{
+		newColumn, err := column.NewBuilder(origInfo.Name, page.BuilderOptions{
 			PageSizeHint: pageSizeHint,
 			Value:        origInfo.Type,
 			Encoding:     pages[0].Info().Encoding,

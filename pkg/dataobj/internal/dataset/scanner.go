@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/result"
 )
@@ -34,12 +35,12 @@ type (
 	// PageFilter is a function which filters out pages based on a column and
 	// page tuple. PageFilter should return true to keep the page, false to
 	// discard it.
-	PageFilter func(column *ColumnInfo, page *page.Info) bool
+	PageFilter func(column *column.Info, page *page.Info) bool
 
 	// EntryFilter is a function which filters out individual entries in a
 	// column. EntryFilter should return true to keep the entry, false to discard
 	// it.
-	EntryFilter func(column *ColumnInfo, entry ScannerEntry) bool
+	EntryFilter func(column *column.Info, entry ScannerEntry) bool
 )
 
 // ScannerEntry represents an individual entry in a scanned column.
@@ -126,7 +127,7 @@ func (s *Scanner) AddEntryFilter(column Column, include EntryFilter) error {
 // stops.
 func (s *Scanner) Iter(ctx context.Context) result.Seq[[]ScannerEntry] {
 	type columnData struct {
-		Info       *ColumnInfo
+		Info       *column.Info
 		Pages      []Page
 		PageInfos  []*page.Info
 		RowOffsets []int

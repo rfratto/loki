@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset"
+	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/column"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/dataset/page"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/encoding"
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/metadata/datasetmd"
@@ -24,7 +24,7 @@ type StreamsEncoder struct {
 
 // OpenColumn opens a new column in the streams section. OpenColumn fails if
 // there is another open column, or if the StreamsEncoder is closed.
-func (enc *StreamsEncoder) OpenColumn(columnType streamsmd.ColumnType, info *dataset.ColumnInfo) (*StreamsColumnEncoder, error) {
+func (enc *StreamsEncoder) OpenColumn(columnType streamsmd.ColumnType, info *column.Info) (*StreamsColumnEncoder, error) {
 	if enc.curColumn != nil {
 		return nil, ErrElementExist
 	} else if enc.closed {
