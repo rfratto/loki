@@ -20,6 +20,18 @@ import (
 	"github.com/grafana/loki/v3/pkg/dataobj/internal/logstreams"
 )
 
+// TODO(rfratto): provide an option for "section striping," where we configure
+// a hint for a size to limit sections to, following compression. This would
+// only serve as an estimate since we don't know how big the data will be after
+// compression.
+//
+// However, limiting the total size of sections in this way would allow for
+// more control over optimizing downloads: if a logs query is being performed
+// where every column needs to be loaded, we could choose to predownload the
+// entire section, and load it in as a dataset. This would also serve as
+// another cache artifact (section) that would live alongside page and column
+// caches.
+
 // TODO(rfratto): validate the BuilderConfig with min/max limits; page size and
 // metadata size should be >4KB and object size should be <3GB (there's an
 // aboluslte hard limit at 4GB).
