@@ -454,7 +454,7 @@ func TestMapTimestampPredicate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			got, err := mapTimestampPredicate(tc.expr)
+			got, err := mapTimestampRowPredicate(tc.expr)
 			if tc.errMatch != "" {
 				require.ErrorContains(t, err, tc.errMatch)
 			} else {
@@ -641,7 +641,7 @@ func TestMapMetadataPredicate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pred, err := mapMetadataPredicate(tc.expr)
+			pred, err := mapMetadataRowPredicate(tc.expr)
 
 			if tc.expectedErr {
 				require.Error(t, err)
@@ -766,7 +766,7 @@ func TestMapMessagePredicate(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Logf("%s", tc.expr)
-			got, err := mapMessagePredicate(tc.expr)
+			got, err := mapMessageRowPredicate(tc.expr)
 			if tc.expectedErr != "" {
 				require.ErrorContains(t, err, tc.expectedErr)
 			} else {

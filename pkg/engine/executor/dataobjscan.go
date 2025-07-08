@@ -21,8 +21,276 @@ import (
 	"github.com/grafana/loki/v3/pkg/engine/planner/physical"
 )
 
+// TODO(rfratto):
+//
+// Going to simplify some of the logic here:
+//
+// 1. (DONE) Add topkPipeline which does SORT+LIMIT against input pipeline(s)
+//
+// 2. Add streamReplacePipeline which replaces stream IDs with stream Labels.
+//		This would require that all child pipelines process the same object.
+//
+// Having the two pipelines separately would greatly simplify the logic here,
+// and it would permit being able to extract the other pipelines out into the
+// call graph later.
+//
+// As a downside, applying stream labels is done before the topk (once the topk
+// is shared), which may have some marginal perfomance overhead. This can be
+// improved once we support dictionaries for the stream labels, as we would
+// create one
+
+// TODO(rfratto): we need to make sure the new returned schema is the same as
+// the old schema. That might take some thinking to figure out how to rename
+// columns without recomputing everything.
+
+type dataobjScanOptions struct {
+	Object      *dataobj.Object             // Object to read from.
+	StreamIDs   []int64                     // Stream IDs to match from logs sections.
+	Section     int                         // Logs section to fetch.
+	Predicates  []logs.Predicate            // Predicate to apply to the logs.
+	Projections []physical.ColumnExpression // Columns to include. An empty slice means all columns.
+
+	Direction physical.SortOrder // Order of timestamps to return (ASC=Forward, DESC=Backward)
+	Limit     uint32             // A limit on the number of rows to return (0=unlimited).
+
+	batchSize int64 // The buffer size for reading rows, derived from the engine batch size.
+}
+
 type dataobjScan struct {
 	opts dataobjScanOptions
+
+	initialized bool
+	reader      *logs.Reader
+	section     *logs.Section
+	streams     arrow.Record // Referenced streams. Only projected columns are included.
+
+	state state
+}
+
+var _ Pipeline = (*dataobjScan)(nil)
+
+// newDataobjRowScanPipeline creates a new Pipeline which emits a single
+// [arrow.Record] composed of the requested log section in a data object. Rows
+// in the returned record are ordered by timestamp in the direction specified
+// by opts.Direction.
+func newDataobjScanPipeline(opts dataobjScanOptions) *dataobjScan {
+	return &dataobjScan{opts: opts}
+}
+
+func (s *dataobjScan) Read(ctx context.Context) error {
+	if err := s.init(ctx); err != nil {
+		return err
+	}
+
+	rec, err := s.read(ctx)
+	s.state = newState(rec, err)
+
+	if err != nil {
+		return fmt.Errorf("reading data object: %w", err)
+	}
+	return nil
+}
+
+func (s *dataobjScan) init(ctx context.Context) error {
+	if s.initialized {
+		return nil
+	}
+
+	panic("NYI: initialize")
+}
+
+// initStreams retrieves all requested stream records from streams sections so
+// that emitted [arrow.Record]s can include stream labels in results.
+func (s *dataobjScan) initStreams() error {
+	var sr streams.RowReader
+	defer sr.Close()
+
+	panic("NYI")
+
+	// TODO(rfratto): use columnar reader here?
+
+	/*
+		streamsBuf := make([]streams.Stream, 512)
+
+		// Initialize entries in the map so we can do a presence test in the loop
+		// below.
+		s.streams = make(map[int64]labels.Labels, len(s.opts.StreamIDs))
+		for _, id := range s.opts.StreamIDs {
+			s.streams[id] = labels.EmptyLabels()
+		}
+
+		for _, section := range s.opts.Object.Sections().Filter(streams.CheckSection) {
+			sec, err := streams.Open(s.ctx, section)
+			if err != nil {
+				return fmt.Errorf("opening streams section: %w", err)
+			}
+
+			// TODO(rfratto): [streams.RowPredicate] is missing support for filtering
+			// on stream IDs when we already know them in advance; this can cause the
+			// Read here to take longer than it needs to since we're reading the
+			// entirety of every row.
+			sr.Reset(sec)
+
+			for {
+				n, err := sr.Read(s.ctx, streamsBuf)
+				if n == 0 && errors.Is(err, io.EOF) {
+					return nil
+				} else if err != nil && !errors.Is(err, io.EOF) {
+					return err
+				}
+
+				for i, stream := range streamsBuf[:n] {
+					if _, found := s.streams[stream.ID]; !found {
+						continue
+					}
+
+					s.streams[stream.ID] = stream.Labels
+
+					// Zero out the stream entry from the slice so the next call to sr.Read
+					// doesn't overwrite any memory we just moved to s.streams.
+					streamsBuf[i] = streams.Stream{}
+				}
+			}
+		}
+
+		// Check that all streams were populated.
+		var errs []error
+		for id, labels := range s.streams {
+			if labels.IsEmpty() {
+				errs = append(errs, fmt.Errorf("requested stream ID %d not found in any stream section", id))
+			}
+		}
+		return errors.Join(errs...)
+	*/
+}
+
+// read reads the entire section into memory and generates an [arrow.Record]
+// from the data. It returns an error if reading a section resulted in an
+// error.
+func (s *dataobjScan) read(ctx context.Context) (arrow.Record, error) {
+	// TODO(rfratto): pass allocator to dataobjScan from dataobjScanOptions.
+	alloc := memory.NewGoAllocator()
+
+	tsField, tsIndex := s.findField(func(column *logs.Column) bool {
+		return column.Type == logs.ColumnTypeTimestamp
+	})
+	if tsIndex == -1 {
+		return nil, fmt.Errorf("unexpected object with no timestamps")
+	}
+
+	heap := &topkBatch{
+		// Sort exclusively by timestamp.
+		Fields:     []arrow.Field{tsField},
+		Ascending:  s.opts.Direction == physical.ASC,
+		NullsFirst: false, // no-op since timestamp is always present
+		K:          int(s.opts.Limit),
+		MaxUnused:  int(s.opts.Limit) * 2,
+	}
+
+	for {
+		// TODO(rfratto): configurable batch size.
+		rec, err := s.reader.Read(ctx, 1024)
+		if rec != nil && rec.NumRows() > 0 {
+			heap.Put(alloc, rec)
+		}
+
+		if err != nil && errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+	}
+
+	// We read the entire section; if the heap is empty, we can return EOF.
+	if count, _ := heap.Size(); count == 0 {
+		return nil, EOF
+	}
+
+	results := heap.Compact(alloc)
+	defer results.Release()
+	return s.replaceStreamIDs(alloc, results)
+}
+
+// findField returns the matching arrow.Field and index for the first column
+// where the predicate function returns true.
+//
+// If findField matches no column, it returns the zero value of arrow.Field and
+// an index of -1.
+func (s *dataobjScan) findField(predicate func(*logs.Column) bool) (field arrow.Field, index int) {
+	for i, column := range s.section.Columns() {
+		if predicate(column) {
+			return s.reader.Schema().Field(i), i
+		}
+	}
+
+	return arrow.Field{}, -1
+}
+
+// replaceStreamIDs replaces the stream IDs column in the record with a set of
+// columns for stream labels.
+func (s *dataobjScan) replaceStreamIDs(alloc memory.Allocator, rec arrow.Record) (arrow.Record, error) {
+	// TODO(rfratto): what if the no stream ID column is being projected?
+	//
+	// In general I think it's better here if we already have a complete record
+	// for stream IDs, including the full set of projected columns already in it,
+	// then we can very easily just merge the two.
+	//
+	// Honestly, using dictionary lookups here would be more ideal but I don't
+	// think the upstream nodes will be able to handle that gracefully.
+
+	_, streamIDIndex := s.findField(func(column *logs.Column) bool {
+		return column.Type == logs.ColumnTypeStreamID
+	})
+	if streamIDIndex == -1 {
+		return nil, fmt.Errorf("unexpected object with no stream IDs")
+	}
+
+	var labels []*array.StringBuilder
+	for i := 0; i < s.streams.Schema().NumFields(); i++ {
+		_ = i
+	}
+
+	for _, id := range rec.Column(streamIDIndex).(*array.Int64).Int64Values() {
+		for i := 0; i < s.streams.Schema().NumFields(); i++ {
+			// TODO(rfratto): skip stream ID, fix incorrect indexing
+			arr := s.streams.Column(i).(*array.String)
+
+			if arr.IsNull(int(id)) {
+				labels[i].AppendNull()
+			} else {
+				labels[i].Append(arr.Value(int(id)))
+			}
+		}
+	}
+
+	// TODO(rfratto): create new record from the arrays of both
+	panic("NYI")
+}
+
+// Value returns the current [arrow.Record] retrieved by the previous call to
+// [dataobjScan.Read], or an error if the record cannot be read.
+func (s *dataobjScan) Value() (arrow.Record, error) { return s.state.batch, s.state.err }
+
+// Close closes s and releases all resources.
+func (s *dataobjScan) Close() {
+	if s.reader != nil {
+		_ = s.reader.Close()
+	}
+}
+
+// Inputs implements [Pipeline] and returns nil, since dataobjScan accepts no
+// pipelines as input.
+func (s *dataobjScan) Inputs() []Pipeline { return nil }
+
+// Transport implements [Pipeline] and returns [Local].
+func (s *dataobjScan) Transport() Transport { return Local }
+
+//
+// OLD
+//
+
+type dataobjRowScan struct {
+	opts dataobjRowScanOptions
 
 	initialized bool
 	reader      *logs.RowReader
@@ -32,7 +300,7 @@ type dataobjScan struct {
 	state state
 }
 
-type dataobjScanOptions struct {
+type dataobjRowScanOptions struct {
 	// TODO(rfratto): Limiting each DataObjScan to a single section is going to
 	// be critical for limiting memory overhead here; the section is intended to
 	// be the smallest unit of parallelization.
@@ -49,22 +317,22 @@ type dataobjScanOptions struct {
 	batchSize int64 // The buffer size for reading rows, derived from the engine batch size.
 }
 
-var _ Pipeline = (*dataobjScan)(nil)
+var _ Pipeline = (*dataobjRowScan)(nil)
 
 // newDataobjScanPipeline creates a new Pipeline which emits a single
 // [arrow.Record] composed of all log sections in a data object. Rows in the
 // returned record are ordered by timestamp in the direction specified by
 // opts.Direction.
-func newDataobjScanPipeline(opts dataobjScanOptions) *dataobjScan {
+func newDataobjRowScanPipeline(opts dataobjRowScanOptions) *dataobjRowScan {
 	if opts.Direction == physical.ASC {
 		// It's ok to panic here, because the validation of log query direction is performed in the logical planner.
 		panic("sorting by timestamp ASC is not supported by DataObjScan")
 	}
-	return &dataobjScan{opts: opts}
+	return &dataobjRowScan{opts: opts}
 }
 
 // Read retrieves the next [arrow.Record] from the dataobj.
-func (s *dataobjScan) Read(ctx context.Context) error {
+func (s *dataobjRowScan) Read(ctx context.Context) error {
 	if err := s.init(ctx); err != nil {
 		return err
 	}
@@ -78,7 +346,7 @@ func (s *dataobjScan) Read(ctx context.Context) error {
 	return nil
 }
 
-func (s *dataobjScan) init(ctx context.Context) error {
+func (s *dataobjRowScan) init(ctx context.Context) error {
 	if s.initialized {
 		return nil
 	}
@@ -133,7 +401,7 @@ func (s *dataobjScan) init(ctx context.Context) error {
 
 // initStreams retrieves all requested stream records from streams sections so
 // that emitted [arrow.Record]s can include stream labels in results.
-func (s *dataobjScan) initStreams(ctx context.Context) error {
+func (s *dataobjRowScan) initStreams(ctx context.Context) error {
 	var sr streams.RowReader
 	defer sr.Close()
 
@@ -193,7 +461,7 @@ func (s *dataobjScan) initStreams(ctx context.Context) error {
 // read reads the entire data object into memory and generates an arrow.Record
 // from the data. It returns an error upon encountering an error while reading
 // one of the sections.
-func (s *dataobjScan) read(ctx context.Context) (arrow.Record, error) {
+func (s *dataobjRowScan) read(ctx context.Context) (arrow.Record, error) {
 	var (
 		n   int   // number of rows yielded by the datobj reader
 		err error // error yielded by the dataobj reader
@@ -242,7 +510,7 @@ func (s *dataobjScan) read(ctx context.Context) (arrow.Record, error) {
 // BACKWARD is a backward search starting at the end of the time range.
 // FORWARD is a forward search starting at the beginning of the time range.
 // If two records have the same timestamp, the compareStreams function is used to determine the sort order.
-func (s *dataobjScan) getLessFunc(direction physical.SortOrder) func(a, b logs.Record) bool {
+func (s *dataobjRowScan) getLessFunc(direction physical.SortOrder) func(a, b logs.Record) bool {
 	compareStreams := func(a, b logs.Record) bool {
 		aStream, ok := s.streams[a.StreamID]
 		if !ok {
@@ -289,7 +557,7 @@ func (s *dataobjScan) getLessFunc(direction physical.SortOrder) func(a, b logs.R
 // * Log message
 //
 // effectiveProjections does not mutate h.
-func (s *dataobjScan) effectiveProjections(records []logs.Record) ([]physical.ColumnExpression, error) {
+func (s *dataobjRowScan) effectiveProjections(records []logs.Record) ([]physical.ColumnExpression, error) {
 	if len(s.opts.Projections) > 0 {
 		return s.opts.Projections, nil
 	}
@@ -481,7 +749,7 @@ func arrowTypeFromColumnRef(ref types.ColumnRef) (arrow.DataType, arrow.Metadata
 // builder. The metadata of field is used to determine the category of column.
 // appendToBuilder panics if the type of field does not match the datatype of
 // builder.
-func (s *dataobjScan) appendToBuilder(builder array.Builder, field *arrow.Field, record *logs.Record) {
+func (s *dataobjRowScan) appendToBuilder(builder array.Builder, field *arrow.Field, record *logs.Record) {
 	columnType, ok := field.Metadata.GetValue(types.MetadataKeyColumnType)
 	if !ok {
 		// This shouldn't happen; we control the metadata here on the fields.
@@ -530,10 +798,10 @@ func (s *dataobjScan) appendToBuilder(builder array.Builder, field *arrow.Field,
 
 // Value returns the current [arrow.Record] retrieved by the previous call to
 // [dataobjScan.Read], or an error if the record cannot be read.
-func (s *dataobjScan) Value() (arrow.Record, error) { return s.state.batch, s.state.err }
+func (s *dataobjRowScan) Value() (arrow.Record, error) { return s.state.batch, s.state.err }
 
 // Close closes s and releases all resources.
-func (s *dataobjScan) Close() {
+func (s *dataobjRowScan) Close() {
 	if s.reader != nil {
 		_ = s.reader.Close()
 	}
@@ -541,7 +809,7 @@ func (s *dataobjScan) Close() {
 
 // Inputs implements Pipeline and returns nil, since DataObjScan accepts no
 // pipelines as input.
-func (s *dataobjScan) Inputs() []Pipeline { return nil }
+func (s *dataobjRowScan) Inputs() []Pipeline { return nil }
 
 // Transport implements Pipeline and returns [Local].
-func (s *dataobjScan) Transport() Transport { return Local }
+func (s *dataobjRowScan) Transport() Transport { return Local }

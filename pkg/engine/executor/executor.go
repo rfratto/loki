@@ -76,7 +76,7 @@ func (c *Context) executeDataObjScan(ctx context.Context, node *physical.DataObj
 	predicates := make([]logs.RowPredicate, 0, len(node.Predicates))
 
 	for _, p := range node.Predicates {
-		conv, err := buildLogsPredicate(p)
+		conv, err := buildLogsRowPredicate(p)
 		if err != nil {
 			return errorPipeline(err)
 		}
@@ -88,7 +88,7 @@ func (c *Context) executeDataObjScan(ctx context.Context, node *physical.DataObj
 		return errorPipeline(fmt.Errorf("creating data object: %w", err))
 	}
 
-	return newDataobjScanPipeline(dataobjScanOptions{
+	return newDataobjRowScanPipeline(dataobjRowScanOptions{
 		Object:      obj,
 		StreamIDs:   node.StreamIDs,
 		Section:     node.Section,
