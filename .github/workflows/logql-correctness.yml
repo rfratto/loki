@@ -107,7 +107,7 @@ jobs:
       - name: Run tests
         run: |
           go test \
-            -tags stringlabels \
+            -tags slicelabels \
             -run=TestStorageEquality/query=.+/kind=.+/store=${{ matrix.store }}$ \
             ${{ inputs.failfast == true && '-failfast' || '' }} \
           | tee results/results.txt
