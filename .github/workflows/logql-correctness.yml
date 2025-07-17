@@ -74,7 +74,7 @@ jobs:
 
   tests:
     name: Run correctness tests for ${{ matrix.store }}
-    runs-on: github-hosted-ubuntu-arm64-large
+    runs-on: ubuntu-latest
     needs: setup-matrix
     strategy:
       matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
