@@ -6,7 +6,7 @@ TENANT ?= test-tenant
 
 generate:
 	@echo "Generating benchmark data..."
-	@go run ./cmd/generate/main.go -tags slicelabels -size $(SIZE) -tenant $(TENANT)
+	@go run -tags slicelabels ./cmd/generate/main.go -size $(SIZE) -tenant $(TENANT)
 
 bench:
 	@echo "Running all benchmarks..."
