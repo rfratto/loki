@@ -66,8 +66,8 @@ jobs:
           STORES=()
 
           # Use explicit equality checks to avoid template injection.
-          ${{ inputs.bench_dataobj_v1 == true }} && STORES+=("dataobj")
-          ${{ inputs.bench_dataobj_v2 == true }} && STORES+=("dataobj-engine")
+          ${{ inputs.test_dataobj_v1 == true }} && STORES+=("dataobj")
+          ${{ inputs.test_dataobj_v2 == true }} && STORES+=("dataobj-engine")
 
           MATRIX_JSON=$(jq -nc --arg stores "${STORES[*]}" '{"store": $stores | split(" ")}')
           echo "matrix=$MATRIX_JSON" >> "$GITHUB_OUTPUT"
