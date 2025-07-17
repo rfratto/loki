@@ -105,9 +105,11 @@ jobs:
         run: mkdir -p ./pkg/logql/bench/results
 
       - name: Run tests
+        shell: bash # Use bash shell to propagate pipe failures
         run: |
           go test \
             -tags slicelabels \
+            -v -slow-tests \
             -run=TestStorageEquality/query=.+/kind=.+/store=${{ matrix.store }}$ \
             ${{ inputs.failfast == true && '-failfast' || '' }} \
           | tee results/results.txt
