@@ -84,6 +84,11 @@ type Column struct {
 	desc *streamsmd.ColumnDesc // Column description used for further decoding and reading.
 }
 
+// Rows returns the number of rows in this column, including NULL values.
+func (col *Column) Rows() uint64 {
+	return col.desc.Info.GetRowsCount()
+}
+
 // ColumnType represents the kind of information stored in a [Column].
 type ColumnType int
 
